@@ -138,13 +138,6 @@ cython_debug/
 # VS Code
 .vscode/
 
-# Model files (large binary files)
-*.pkl
-*.h5
-*.hdf5
-*.joblib
-*.pickle
-
 # Data files
 *.csv
 *.json
@@ -210,11 +203,3 @@ newenv/
 venv/
 env/
 .venv/
-
-# Large model files (uncomment if you want to ignore all model files)
-# models/*.pkl
-# models/*.h5
-# models/*.hdf5
-
-# Keep specific model files if needed (add exceptions here)
-# !models/important_model.pkl 
