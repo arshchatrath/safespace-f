@@ -18,11 +18,10 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg"
-          : "bg-gradient-to-r from-blue-700 via-blue-600 to-teal-600 bg-opacity-95 backdrop-blur-md border-b border-blue-800 shadow-lg"
-      }`}
+      className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled
+        ? "bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg"
+        : "bg-gradient-to-r from-blue-700 via-blue-600 to-teal-600 bg-opacity-95 backdrop-blur-md border-b border-blue-800 shadow-lg"
+        }`}
       style={{
         backgroundColor: scrolled ? undefined : "rgba(29, 78, 216, 0.95)",
         color: scrolled ? undefined : "#fff",
@@ -33,11 +32,10 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-14 sm:h-16">
           <Link
             href="/"
-            className={`text-xl sm:text-2xl font-bold transition-colors duration-300 ${
-              scrolled
-                ? "bg-gradient-to-r from-blue-600 to-teal-600 bg-clip-text text-transparent"
-                : "text-white drop-shadow-lg"
-            }`}
+            className={`text-xl sm:text-2xl font-bold transition-colors duration-300 ${scrolled
+              ? "bg-gradient-to-r from-blue-600 to-teal-600 bg-clip-text text-transparent"
+              : "text-white drop-shadow-lg"
+              }`}
           >
             SafeSpace AI
           </Link>
@@ -46,18 +44,24 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
             <Link
               href="/"
-              className={`transition-colors duration-300 hover:scale-105 ${
-                scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white" 
-              } font-semibold`}
+              className={`transition-colors duration-300 hover:scale-105 ${scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white"
+                } font-semibold`}
               style={!scrolled ? { textShadow: "0 2px 8px rgba(0,0,0,0.25)" } : {}}
             >
               Home
             </Link>
+            <Link
+              href="/stressbuster"
+              className={`transition-colors duration-300 hover:scale-105 ${scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white"
+                } font-semibold`}
+              style={!scrolled ? { textShadow: "0 2px 8px rgba(0,0,0,0.25)" } : {}}
+            >
+              StressBuster
+            </Link>
             <a
               href="/#contributors"
-              className={`transition-colors duration-300 hover:scale-105 ${
-                scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white" 
-              } font-semibold`}
+              className={`transition-colors duration-300 hover:scale-105 ${scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white"
+                } font-semibold`}
               style={!scrolled ? { textShadow: "0 2px 8px rgba(0,0,0,0.25)" } : {}}
             >
               Contributors
@@ -66,9 +70,8 @@ export default function Navbar() {
               href="https://github.com/arshchatrath/SafeSpace"
               target="_blank"
               rel="noopener noreferrer"
-              className={`flex items-center space-x-2 transition-all duration-300 hover:scale-105 ${
-                scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white" 
-              } font-semibold`}
+              className={`flex items-center space-x-2 transition-all duration-300 hover:scale-105 ${scrolled ? "text-gray-700 hover:text-blue-600" : "text-white/90 hover:text-white"
+                } font-semibold`}
               style={!scrolled ? { textShadow: "0 2px 8px rgba(0,0,0,0.25)" } : {}}
             >
               <Github size={18} />
@@ -80,9 +83,8 @@ export default function Navbar() {
           <div className="md:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className={`transition-colors duration-300 ${
-                scrolled ? "text-gray-700 hover:text-blue-600" : "text-white hover:text-blue-200"
-              }`}
+              className={`transition-colors duration-300 ${scrolled ? "text-gray-700 hover:text-blue-600" : "text-white hover:text-blue-200"
+                }`}
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -100,6 +102,14 @@ export default function Navbar() {
                 onClick={() => setIsOpen(false)}
               >
                 Home
+              </Link>
+              <Link
+                href="/stressbuster"
+                className="block px-3 py-2 text-white font-semibold hover:text-blue-200 hover:bg-blue-800/60 rounded-lg transition-all duration-200"
+                style={{ textShadow: "0 2px 8px rgba(0,0,0,0.25)" }}
+                onClick={() => setIsOpen(false)}
+              >
+                StressBuster
               </Link>
               <a
                 href="/#contributors"
