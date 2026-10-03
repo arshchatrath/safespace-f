@@ -2,6 +2,12 @@
 tensorflow==2.13.0
 keras==2.13.1
 
+# API server
+fastapi==0.95.2
+uvicorn==0.20.0
+python-multipart==0.0.9
+typing-extensions==4.5.0
+
 # Audio Processing
 librosa==0.10.1
 soundfile==0.12.1

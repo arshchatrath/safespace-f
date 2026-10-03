@@ -9,7 +9,7 @@ The system now supports real-time voice audio analysis for stress detection usin
 ## Features
 
 - **Real-time voice recording**: Users can record their voice directly in the browser
-- **Audio file upload**: Support for various audio formats (WAV, MP3, M4A, FLAC, OGG)
+- **Audio file upload**: Support for WAV, MP3, M4A, FLAC, OGG, and WebM files
 - **MFCC feature extraction**: Automatic extraction of Mel-frequency cepstral coefficients
 - **Deep learning analysis**: Voice stress prediction using a CNN-GRU-Attention model
 - **Audio verification**: Playback functionality to verify recordings before submission
@@ -53,42 +53,7 @@ Predicts stress level using all available modalities (physiological, questionnai
 }
 ```
 
-### 2. Voice-Only Prediction (`POST /predict/voice-only`)
-
-Predicts stress level using only voice audio (useful for testing).
-
-**Parameters:**
-- `voice_audio`: Audio file for voice analysis (required)
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "predictions": {
-    "voice_probs": [0.15, 0.35, 0.5],
-    "voice_pred": 2,
-    "prediction_label": "High",
-    "confidence": 0.5
-  },
-  "explanations": {
-    "voice": {
-      "available": true,
-      "method": "Probability Analysis",
-      "feature_importance": [...],
-      "summary": "Voice analysis suggests high stress level with 50.0% confidence..."
-    }
-  },
-  "metadata": {
-    "voice_filename": "user_voice.wav",
-    "voice_features_shape": [1, 228, 40, 1],
-    "model_used": "voice_finetuned_model"
-  }
-}
-```
-
-### 3. Debug Information (`GET /debug/explanations`)
-
-Returns information about loaded models and system status.
+Voice-only prediction and `/debug/explanations` are not implemented. To use voice analysis, include `voice_audio` in the full `POST /predict` request along with the required CSV and DASS-21 answers. The interactive API docs are available at `http://localhost:8000/docs`.
 
 ## Voice Model Architecture
 
@@ -113,8 +78,10 @@ The voice model uses a CNN-GRU-Attention architecture:
 
 ### 1. Install Dependencies
 
-```bash
-pip install -r requirements_voice.txt
+```powershell
+cd Server
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ### 2. Ensure Voice Model is Available
@@ -126,36 +93,14 @@ Server/models/model_finetuned.h5
 
 ### 3. Start the Server
 
-```bash
+```powershell
 cd Server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Testing
 
-### 1. Test Server Status
-
-```bash
-python test_voice.py
-```
-
-### 2. Test Voice-Only Prediction
-
-```python
-# In test_voice.py, uncomment and modify:
-test_voice_only_prediction("path/to/your/audio.wav")
-```
-
-### 3. Test Full Prediction
-
-```python
-# In test_voice.py, uncomment and modify:
-test_full_prediction(
-    "path/to/physio.csv",
-    [1, 2, 0, 3, 1, 2, 0],  # DASS-21 responses
-    "path/to/audio.wav"  # Optional
-)
-```
+Open `http://localhost:3000/check`, upload the sample CSV from the repository root, answer all seven questionnaire items, then record or upload an audio clip before submitting. The voice upload is optional. The backend also provides `test_voice_integration.py` for local model and feature-extraction checks; run it from `Server/` with the project virtual environment.
 
 ## Frontend Integration
 
@@ -168,52 +113,7 @@ The `VoiceRecorder` component provides:
 - **Playback**: Verify recordings before submission
 - **Error handling**: Permission and format validation
 
-### Usage Example
-
-```tsx
-import VoiceRecorder from './components/VoiceRecorder';
-
-function StressAnalysisForm() {
-  const [voiceAudio, setVoiceAudio] = useState<Blob | null>(null);
-
-  const handleAudioReady = (audioBlob: Blob) => {
-    setVoiceAudio(audioBlob);
-  };
-
-  const handleAudioClear = () => {
-    setVoiceAudio(null);
-  };
-
-  const handleSubmit = async () => {
-    const formData = new FormData();
-    formData.append('physiological_file', physioFile);
-    formData.append('dass21_responses', JSON.stringify(dass21Responses));
-    
-    if (voiceAudio) {
-      formData.append('voice_audio', voiceAudio, 'voice.wav');
-    }
-
-    const response = await fetch('/api/predict', {
-      method: 'POST',
-      body: formData
-    });
-    
-    const result = await response.json();
-    // Handle result...
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {/* Other form fields */}
-      <VoiceRecorder
-        onAudioReady={handleAudioReady}
-        onAudioClear={handleAudioClear}
-      />
-      <button type="submit">Analyze Stress</button>
-    </form>
-  );
-}
-```
+The assessment page at `Client/app/check/page.tsx` uses the shared `VoiceRecorder` component and submits the audio as `voice_audio` to `http://localhost:8000/predict`. It also sends the required physiological CSV and DASS-21 responses in the same multipart request.
 
 ## Supported Audio Formats
 
@@ -222,6 +122,7 @@ function StressAnalysisForm() {
 - **M4A**: Apple audio format
 - **FLAC**: Lossless compression
 - **OGG**: Open source format
+- **WebM**: Browser recording format
 
 ## Audio Quality Recommendations
 
@@ -250,12 +151,9 @@ function StressAnalysisForm() {
    - Ensure audio file is not corrupted
    - Check audio duration (minimum 1 second)
 
-### Debug Information
+### API availability
 
-Use the debug endpoint to check system status:
-```bash
-curl http://localhost:8000/debug/explanations
-```
+Open `http://localhost:8000/docs` to verify the backend is serving requests. The active prediction route is `POST /predict`.
 
 ## Performance Considerations
 
