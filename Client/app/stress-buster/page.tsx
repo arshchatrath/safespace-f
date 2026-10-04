@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import DinosaurGame from "../components/DinosaurGame"
 import MemoryGame from "../components/MemoryGame"
@@ -83,6 +84,10 @@ export default function StressBusterPage() {
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink/70">
               A couple of light games for clearing your head between tasks — or after a stress check.
             </p>
+            <Link href="/check" className="btn-ghost mt-8">
+              Take the stress check
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </div>
         </header>
 

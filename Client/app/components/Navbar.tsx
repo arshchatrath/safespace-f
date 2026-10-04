@@ -10,7 +10,7 @@ const GITHUB_URL = "https://github.com/arshchatrath/SafeSpace"
 
 const links = [
   { href: "/#how-it-works", label: "How it works" },
-  { href: "/stressbuster", label: "StressBuster" },
+  { href: "/stress-buster", label: "StressBuster" },
   { href: "/#contributors", label: "Team" },
 ]
 

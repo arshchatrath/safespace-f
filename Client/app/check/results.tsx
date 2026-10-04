@@ -37,6 +37,17 @@ interface StressResult {
       }>
       summary: string
     }
+    voice: {
+      available: boolean
+      method: string
+      feature_importance: Array<{
+        feature: string
+        importance: number
+        abs_importance: number
+        value: number
+      }>
+      summary: string
+    }
     fusion: {
       available: boolean
       method: string
@@ -162,6 +173,7 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
   const physioFactors = explanations?.physiological
   const questionnaireFactors = explanations?.questionnaire
   const fusion = explanations?.fusion
+  const voiceFactors = explanations?.voice
 
   return (
     <div className="space-y-6">
@@ -252,29 +264,11 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
             <p className="eyebrow">AI explanations</p>
           </div>
 
-          <div className="mt-6 grid gap-8 lg:grid-cols-3 lg:gap-10">
+          <div className="mt-6 grid gap-8 md:grid-cols-2 lg:gap-10">
             {fusion?.available && (
               <div>
                 <h4 className="font-semibold text-ink">Fusion analysis</h4>
                 <p className="mt-2 leading-relaxed text-ink/75">{fusion.summary}</p>
-                <h5 className="mt-5 text-sm font-semibold text-ink">Modality contributions</h5>
-                <ul className="mt-3 space-y-3">
-                  {fusion.modality_contributions.map((modality, index) => (
-                    <li key={index}>
-                      <div className="flex justify-between text-sm">
-                        <span className="capitalize text-ink">{modality.modality}</span>
-                        <span className="tabular-nums text-muted-foreground">{pct(modality.contribution_score)}</span>
-                      </div>
-                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-pine"
-                          style={{ width: `${Math.min(100, Math.max(0, modality.contribution_score * 100))}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">Confidence: {pct(modality.confidence)}</p>
-                    </li>
-                  ))}
-                </ul>
               </div>
             )}
 
@@ -314,6 +308,21 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
                     <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                       <span className="text-ink">{formatFeatureName(feature.feature)}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">Score: {feature.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {voiceFactors?.available && voiceFactors.feature_importance.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-ink">Voice analysis insights</h4>
+                <p className="mt-2 leading-relaxed text-ink/75">{voiceFactors.summary}</p>
+                <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
+                  {voiceFactors.feature_importance.slice(0, 3).map((feature, index) => (
+                    <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <span className="text-ink">{formatFeatureName(feature.feature)}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{pct(feature.value)} probability</span>
                     </li>
                   ))}
                 </ul>

@@ -29,7 +29,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/stressbuster" className="link-draw hover:text-paper">
+                <Link href="/stress-buster" className="link-draw hover:text-paper">
                   StressBuster games
                 </Link>
               </li>

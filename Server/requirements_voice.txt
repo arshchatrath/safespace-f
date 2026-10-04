@@ -1,0 +1,5 @@
+# Reuse the backend's compatible, pinned ML and API dependencies.
+-r requirements.txt
+
+# Used by the optional HTTP test script.
+requests==2.34.2

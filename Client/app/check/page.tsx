@@ -4,7 +4,8 @@ import type React from "react"
 
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
 import { gsap } from "gsap"
-import { Mic, Square, Upload, FileCheck2, AlertCircle, Check, Watch, AudioLines } from "lucide-react"
+import Link from "next/link"
+import { Mic, Square, Upload, FileCheck2, AlertCircle, Check, Watch, AudioLines, X, ArrowRight } from "lucide-react"
 import Results from "./results"
 
 const DASS21_QUESTIONS = [
@@ -34,10 +35,18 @@ export default function CheckPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioURL, setAudioURL] = useState<string | null>(null)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [micError, setMicError] = useState<string | null>(null)
   const [allDataReady, setAllDataReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
@@ -99,6 +108,7 @@ export default function CheckPage() {
     const file = event.target.files?.[0]
     if (file) {
       setAudioFile(file)
+      setAudioURL(URL.createObjectURL(file))
     }
   }
 
@@ -106,16 +116,79 @@ export default function CheckPage() {
     setDeviceConnected(!deviceConnected)
   }
 
-  const toggleRecording = () => {
-    setIsRecording(!isRecording)
-    if (!isRecording) {
-      // Simulate recording for 3 seconds
-      setTimeout(() => {
-        setIsRecording(false)
-        setAudioFile(new File([""], "recorded_audio.wav", { type: "audio/wav" }))
-      }, 3000)
+  const startRecording = async () => {
+    try {
+      setMicError(null)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      });
+
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
+      const chunks: Blob[] = [];
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const audioFile = new File([blob], "recorded_audio.webm", { type: "audio/webm" });
+        setAudioFile(audioFile);
+        setAudioURL(URL.createObjectURL(blob));
+
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      // Start timer
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      setMicError("We couldn't access your microphone. Check your browser permissions, or upload an audio file instead.");
     }
-  }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
 
   const analyzeAllModalities = async () => {
     if (!allDataReady || !uploadedFile) return;
@@ -130,19 +203,32 @@ export default function CheckPage() {
       formData.append("physiological_file", uploadedFile);
       formData.append("dass21_responses", dass21ResponseString);
 
-      // Add voice probabilities if audio file is available
+      // Add voice audio if available
       if (audioFile) {
-        // For now, we'll use a default voice probability distribution
-        // In a real implementation, you would process the audio file
-        const voiceProbs = [0.33, 0.34, 0.33]; // Default uniform distribution
-        formData.append("voice_probabilities", voiceProbs.join(","));
+        formData.append("voice_audio", audioFile, audioFile.name);
+        console.log("✅ Voice audio file details:", {
+          name: audioFile.name,
+          type: audioFile.type,
+          size: audioFile.size,
+          lastModified: audioFile.lastModified
+        });
       }
 
       // Debug prints
       console.log("✅ Sending physiological_file:", uploadedFile.name);
       console.log("✅ DASS-21 Responses:", dass21ResponseString);
       if (audioFile) {
-        console.log("✅ Voice probabilities:", [0.33, 0.34, 0.33]);
+        console.log("✅ Voice audio file:", audioFile.name);
+      }
+
+      // Debug: Log FormData contents
+      console.log("📋 FormData contents:");
+      for (let [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}: File(${value.name}, ${value.type}, ${value.size} bytes)`);
+        } else {
+          console.log(`  ${key}: ${value}`);
+        }
       }
 
       const response = await fetch("http://localhost:8000/predict", {
@@ -171,10 +257,26 @@ export default function CheckPage() {
 
   const getCompletionPercentage = () => {
     let completed = 0
-    if (uploadedFile) completed += 50
-    if (dass21Responses.some((response) => response > 0)) completed += 50
+    if (uploadedFile) completed += 40
+    if (dass21Responses.some((response) => response > 0)) completed += 40
+    if (audioFile) completed += 20
     return completed
   }
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const clearAudio = () => {
+    if (audioURL) {
+      URL.revokeObjectURL(audioURL);
+    }
+    setAudioURL(null);
+    setAudioFile(null);
+    setRecordingTime(0);
+  };
 
   const hasQuestionnaire = dass21Responses.some((response) => response > 0)
   const completion = getCompletionPercentage()
@@ -207,12 +309,16 @@ export default function CheckPage() {
               Add your physiological data and answer seven short statements. A voice sample is optional, but it helps
               the reading.
             </p>
+            <Link href="/stress-buster" className="link-draw mt-5 inline-flex items-center gap-2 text-sm font-semibold text-ink">
+              Need a break first? Try StressBuster
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </div>
         </header>
 
         <div className="mt-10 grid gap-10 lg:mt-14 lg:grid-cols-12 lg:gap-12">
           {/* Steps */}
-          <div className="space-y-6 lg:col-span-8">
+          <div className="min-w-0 space-y-6 lg:col-span-8">
             {/* 01 Physiological */}
             <StepSection
               id="step-physio"
@@ -370,52 +476,75 @@ export default function CheckPage() {
               done={!!(audioFile || isRecording)}
               intro="Say a few sentences about your day, or upload a short recording."
             >
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  onClick={toggleRecording}
-                  aria-pressed={isRecording}
-                  className={`group relative grid h-24 w-24 shrink-0 place-items-center rounded-full text-paper transition-[background-color,transform] duration-300 ease-soft motion-safe:hover:scale-[1.04] ${
-                    isRecording ? "bg-clay-deep" : "bg-pine hover:bg-pine-deep"
-                  }`}
-                >
-                  {isRecording && <span className="absolute inset-0 rounded-full bg-clay/40 motion-safe:animate-ping" aria-hidden="true" />}
-                  {isRecording ? <Square className="relative h-6 w-6 fill-current" aria-hidden="true" /> : <Mic className="relative h-7 w-7" aria-hidden="true" />}
-                  <span className="sr-only">{isRecording ? "Stop recording" : "Start voice recording"}</span>
-                </button>
+              {!audioURL ? (
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={toggleRecording}
+                    aria-pressed={isRecording}
+                    className={`group relative grid h-24 w-24 shrink-0 place-items-center rounded-full text-paper transition-[background-color,transform] duration-300 ease-soft motion-safe:hover:scale-[1.04] ${
+                      isRecording ? "bg-clay-deep" : "bg-pine hover:bg-pine-deep"
+                    }`}
+                  >
+                    {isRecording && <span className="absolute inset-0 rounded-full bg-clay/40 motion-safe:animate-ping" aria-hidden="true" />}
+                    {isRecording ? <Square className="relative h-6 w-6 fill-current" aria-hidden="true" /> : <Mic className="relative h-7 w-7" aria-hidden="true" />}
+                    <span className="sr-only">{isRecording ? "Stop recording" : "Start voice recording"}</span>
+                  </button>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex h-8 items-end gap-1" aria-hidden="true">
-                    {Array.from({ length: 18 }, (_, i) => (
-                      <span
-                        key={i}
-                        className={`w-1.5 rounded-full transition-colors duration-300 ${isRecording ? "animate-level bg-clay" : audioFile ? "bg-pine/60" : "bg-ink/15"}`}
-                        style={{
-                          height: `${30 + ((i * 37) % 70)}%`,
-                          animationDelay: `${(i % 6) * -0.15}s`,
-                        }}
-                      />
-                    ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex h-8 items-end gap-1" aria-hidden="true">
+                      {Array.from({ length: 18 }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`w-1.5 rounded-full transition-colors duration-300 ${isRecording ? "animate-level bg-clay" : "bg-ink/15"}`}
+                          style={{
+                            height: `${30 + ((i * 37) % 70)}%`,
+                            animationDelay: `${(i % 6) * -0.15}s`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-3 flex items-baseline gap-3 text-sm font-medium text-ink" aria-live="polite">
+                      {isRecording ? "Recording… tap to stop." : "Tap the microphone to record."}
+                      {isRecording && <span className="font-mono tabular-nums text-clay-deep">{formatTime(recordingTime)}</span>}
+                    </p>
+                    {micError && (
+                      <p role="alert" className="mt-2 flex items-start gap-2 text-sm text-clay-deep">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        {micError}
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-3 text-sm font-medium text-ink" aria-live="polite">
-                    {isRecording
-                      ? "Recording… tap to stop."
-                      : audioFile && audioFile.name === "recorded_audio.wav"
-                        ? "Voice recorded successfully."
-                        : audioFile
-                          ? `${audioFile.name} uploaded.`
-                          : "Tap the microphone to record."}
+                </div>
+              ) : (
+                <div className="min-w-0 rounded-2xl bg-sage-soft/70 p-4 sm:p-5">
+                  <div className="flex items-center gap-3">
+                    <audio ref={audioRef} src={audioURL} controls className="h-10 w-full min-w-0 flex-1" />
+                    <button
+                      type="button"
+                      onClick={clearAudio}
+                      aria-label="Remove recording"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink/60 transition-colors hover:bg-ink/5 hover:text-clay-deep"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p className="mt-3 flex items-center gap-2 text-sm text-ink" aria-live="polite">
+                    <Check className="h-4 w-4 text-pine" strokeWidth={3} aria-hidden="true" />
+                    {audioFile && audioFile.name === "recorded_audio.webm"
+                      ? "Voice recorded successfully. Play it back to check before submitting."
+                      : `${audioFile?.name ?? "Audio"} uploaded. Play it back to check before submitting.`}
                   </p>
                 </div>
-              </div>
+              )}
 
               <div className="mt-6 flex flex-col gap-3 border-t border-ink/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3 or M4A.</p>
+                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3, M4A or WebM.</p>
                 <div>
                   <input
                     id="audio-upload"
                     type="file"
-                    accept=".wav,.mp3,.m4a"
+                    accept=".wav,.mp3,.m4a,.webm"
                     onChange={handleAudioUpload}
                     className="peer sr-only"
                   />
@@ -444,7 +573,7 @@ export default function CheckPage() {
               <div
                 className="mt-4 h-1.5 overflow-hidden rounded-full bg-paper/15"
                 role="progressbar"
-                aria-label="Required steps completed"
+                aria-label="Check completion"
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={completion}
