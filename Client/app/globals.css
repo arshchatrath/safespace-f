@@ -188,6 +188,74 @@
   animation: signal-flow 3.2s linear infinite;
 }
 
+@keyframes hero-wave-back-drift {
+  0%,
+  100% {
+    transform: translateX(-1.1%);
+  }
+  50% {
+    transform: translateX(1.1%);
+  }
+}
+
+@keyframes hero-wave-mid-drift {
+  0%,
+  100% {
+    transform: translate(1.2%, 1px);
+  }
+  50% {
+    transform: translate(-1.2%, -2px);
+  }
+}
+
+@keyframes hero-wave-line-drift {
+  0%,
+  100% {
+    transform: translateX(1%);
+  }
+  50% {
+    transform: translateX(-1%);
+  }
+}
+
+@keyframes hero-wave-dash {
+  to {
+    stroke-dashoffset: -46;
+  }
+}
+
+.hero-wave-back,
+.hero-wave-mid,
+.hero-wave-line {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.hero-wave-back {
+  animation: hero-wave-back-drift 32s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.hero-wave-mid {
+  animation: hero-wave-mid-drift 38s cubic-bezier(0.45, 0, 0.55, 1) -9s infinite;
+}
+
+.hero-wave-line {
+  stroke-dasharray: 18 28;
+  animation: hero-wave-line-drift 34s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.hero-wave-line-ochre {
+  animation-name: hero-wave-dash, hero-wave-line-drift;
+  animation-duration: 42s, 36s;
+  animation-timing-function: linear, cubic-bezier(0.45, 0, 0.55, 1);
+  animation-iteration-count: infinite;
+}
+
+.hero-wave-line-pine {
+  animation-duration: 40s;
+}
+
 /* Voice level bars while recording */
 @keyframes level {
   0%,

@@ -1,4 +1,4 @@
-// SafeSpace mark: a soft enclosure with a resting dot — a "space" holding something small and safe.
+// SafeSpace mark: a soft enclosure with a resting dot, like a small, safe space.
 export function LogoMark({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>

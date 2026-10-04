@@ -69,13 +69,14 @@ export default function CheckPage() {
     }
   }, [stressResult])
 
-  // Check if required modalities have data (physiological and questionnaire are required, voice is optional)
+  // All three inputs are required before analysis can start.
   useEffect(() => {
     const hasPhysiological = uploadedFile !== null
     const hasQuestionnaire = dass21Responses.some((response) => response > 0)
+    const hasVoice = audioFile !== null
 
-    setAllDataReady(hasPhysiological && hasQuestionnaire)
-  }, [uploadedFile, dass21Responses])
+    setAllDataReady(hasPhysiological && hasQuestionnaire && hasVoice)
+  }, [uploadedFile, dass21Responses, audioFile])
 
   const handleDass21Change = (index: number, value: number) => {
     const newResponses = [...dass21Responses]
@@ -191,7 +192,7 @@ export default function CheckPage() {
   }, [])
 
   const analyzeAllModalities = async () => {
-    if (!allDataReady || !uploadedFile) return;
+    if (!allDataReady || !uploadedFile || !audioFile) return;
 
     setIsLoading(true);
     setError(null);
@@ -203,23 +204,18 @@ export default function CheckPage() {
       formData.append("physiological_file", uploadedFile);
       formData.append("dass21_responses", dass21ResponseString);
 
-      // Add voice audio if available
-      if (audioFile) {
-        formData.append("voice_audio", audioFile, audioFile.name);
-        console.log("✅ Voice audio file details:", {
-          name: audioFile.name,
-          type: audioFile.type,
-          size: audioFile.size,
-          lastModified: audioFile.lastModified
-        });
-      }
+      formData.append("voice_audio", audioFile, audioFile.name);
+      console.log("✅ Voice audio file details:", {
+        name: audioFile.name,
+        type: audioFile.type,
+        size: audioFile.size,
+        lastModified: audioFile.lastModified
+      });
 
       // Debug prints
       console.log("✅ Sending physiological_file:", uploadedFile.name);
       console.log("✅ DASS-21 Responses:", dass21ResponseString);
-      if (audioFile) {
-        console.log("✅ Voice audio file:", audioFile.name);
-      }
+      console.log("✅ Voice audio file:", audioFile.name);
 
       // Debug: Log FormData contents
       console.log("📋 FormData contents:");
@@ -284,7 +280,7 @@ export default function CheckPage() {
   const checklist = [
     { id: "step-physio", label: "Physiological data", done: !!uploadedFile, required: true },
     { id: "step-questionnaire", label: "Questionnaire", done: hasQuestionnaire, required: true },
-    { id: "step-voice", label: "Voice", done: !!audioFile, required: false },
+    { id: "step-voice", label: "Voice", done: !!audioFile, required: true },
   ]
 
   const statusMessage = isLoading
@@ -306,8 +302,7 @@ export default function CheckPage() {
               Let&rsquo;s see how you&rsquo;re <span className="italic text-pine">really</span> doing.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink/70">
-              Add your physiological data and answer seven short statements. A voice sample is optional, but it helps
-              the reading.
+              Add your physiological data, answer seven short statements, and include a short voice sample to get your reading.
             </p>
             <Link href="/stress-buster" className="link-draw mt-5 inline-flex items-center gap-2 text-sm font-semibold text-ink">
               Need a break first? Try StressBuster
@@ -326,7 +321,7 @@ export default function CheckPage() {
               title="Physiological data"
               done={!!uploadedFile}
               required
-              intro="Signals from a wearable — EDA, ECG, temperature and movement — exported as a file."
+              intro="Wearable signals such as EDA, ECG, temperature and movement, exported as a CSV file."
             >
               <div
                 onDragOver={(e) => {
@@ -473,8 +468,9 @@ export default function CheckPage() {
               id="step-voice"
               number="03"
               title="Voice"
-              done={!!(audioFile || isRecording)}
-              intro="Say a few sentences about your day, or upload a short recording."
+              done={!!audioFile}
+              required
+              intro="Record a few sentences about your day or upload a short voice sample. You need one to continue."
             >
               {!audioURL ? (
                 <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
@@ -632,7 +628,9 @@ export default function CheckPage() {
                 <p className="mt-4 text-sm leading-relaxed text-paper/60">
                   {uploadedFile && !hasQuestionnaire
                     ? "Rate at least one statement above 0 to continue."
-                    : "Add physiological data and answer the questionnaire to continue."}
+                    : uploadedFile && hasQuestionnaire && !audioFile
+                      ? "Record or upload a voice sample to continue."
+                      : "Add physiological data, answer the questionnaire, and include a voice sample to continue."}
                 </p>
               )}
 

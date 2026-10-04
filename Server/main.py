@@ -11,7 +11,7 @@ import json
 from scipy import signal
 from scipy.stats import skew, kurtosis
 import pywt
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import shap
 import lime
 import lime.lime_tabular
@@ -891,15 +891,15 @@ except Exception as e:
 async def predict(
     physiological_file: UploadFile = File(..., description="CSV file with physiological data"),
     dass21_responses: str = Form(..., description="DASS-21 responses as comma-separated values or JSON array"),
-    voice_audio: Optional[UploadFile] = File(None, description="Voice audio file (WAV, MP3, etc.) for stress analysis (optional)")
+    voice_audio: UploadFile = File(..., description="Required voice audio file (WAV, MP3, etc.) for stress analysis")
 ):
     """
-    Predict stress level using physiological data, DASS-21 responses, and optional voice audio
+    Predict stress level using physiological data, DASS-21 responses, and voice audio
     
     Args:
         physiological_file: CSV file with columns: ECG, EDA, EMG, Temp
         dass21_responses: 7 values between 0-3, format: "[1,2,0,3,1,2,0]" or "1,2,0,3,1,2,0"
-        voice_audio: Audio file for voice stress analysis (WAV, MP3, etc.)
+        voice_audio: Required audio file for voice stress analysis (WAV, MP3, etc.)
     
     Returns:
         JSON with individual model probabilities, fusion results, predictions, and explanations
@@ -954,37 +954,27 @@ async def predict(
             print(f"❌ DASS-21 processing failed: {e}")
             raise ValueError(f"DASS-21 processing failed: {str(e)}")
 
-        # === Process Voice Data (Optional) ===
-        voice_probs = None
-        if voice_audio:
-            print("\n🎤 Processing voice audio...")
-            print(f"🎤 Voice audio file: {voice_audio.filename}")
-            print(f"🎤 Voice audio content type: {voice_audio.content_type}")
-            print(f"🎤 Voice audio size: {voice_audio.size if hasattr(voice_audio, 'size') else 'Unknown'}")
-            print(f"🎤 Voice audio filename lower: {voice_audio.filename.lower()}")
-            print(f"🎤 Supported extensions: {('.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm')}")
-            
-            try:
-                # Validate audio file
-                if not voice_audio.filename.lower().endswith(('.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm')):
-                    raise ValueError(f"Voice audio file must be a supported audio format (WAV, MP3, M4A, FLAC, OGG, WebM). Got: {voice_audio.filename}")
-                
-                # Process audio file and extract features
-                mfcc_features = process_audio_file(voice_audio)
-                print(f"✅ Voice features extracted, shape: {mfcc_features.shape}")
-                
-                # Make prediction with voice model
-                voice_probs = voice_model.predict(mfcc_features, verbose=0)[0]
-                print(f"✅ Voice probabilities: {voice_probs}")
-                
-            except Exception as e:
-                print(f"❌ Voice processing failed: {e}")
-                import traceback
-                traceback.print_exc()
-                raise ValueError(f"Voice processing failed: {str(e)}")
-        else:
-            print("\n🎤 No voice audio provided, using default uniform distribution")
-            voice_probs = np.array([0.33, 0.34, 0.33])  # Default uniform distribution
+        # === Process Required Voice Data ===
+        print("\n🎤 Processing voice audio...")
+        print(f"🎤 Voice audio file: {voice_audio.filename}")
+        print(f"🎤 Voice audio content type: {voice_audio.content_type}")
+        print(f"🎤 Voice audio size: {voice_audio.size if hasattr(voice_audio, 'size') else 'Unknown'}")
+        print(f"🎤 Voice audio filename lower: {voice_audio.filename.lower()}")
+        print(f"🎤 Supported extensions: {('.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm')}")
+
+        try:
+            if not voice_audio.filename.lower().endswith(('.wav', '.mp3', '.m4a', '.flac', '.ogg', '.webm')):
+                raise ValueError(f"Voice audio file must be a supported audio format (WAV, MP3, M4A, FLAC, OGG, WebM). Got: {voice_audio.filename}")
+
+            mfcc_features = process_audio_file(voice_audio)
+            print(f"✅ Voice features extracted, shape: {mfcc_features.shape}")
+            voice_probs = voice_model.predict(mfcc_features, verbose=0)[0]
+            print(f"✅ Voice probabilities: {voice_probs}")
+        except Exception as e:
+            print(f"❌ Voice processing failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Voice processing failed: {str(e)}")
 
         # === Fusion ===
         print("\n🔄 Performing fusion...")
@@ -1034,7 +1024,7 @@ async def predict(
             "predictions": {
                 "physio_probs": physio_probs_avg.tolist(),
                 "dass21_probs": dass21_probs.tolist(),
-                "voice_probs": voice_probs.tolist() if voice_audio else None,
+                "voice_probs": voice_probs.tolist(),
                 "fusion_probs": fusion_probs.tolist(),
                 "fusion_pred": fusion_pred,
                 "prediction_label": ["Low", "Medium", "High"][fusion_pred],

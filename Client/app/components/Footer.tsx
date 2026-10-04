@@ -7,8 +7,8 @@ import { Wordmark } from "./Logo"
 export default function Footer() {
   return (
     <footer className="grain overflow-hidden bg-ink text-paper">
-      <div className="mx-auto max-w-7xl px-5 pb-10 pt-20 sm:px-8 lg:px-10 lg:pt-28">
-        <div className="grid gap-12 lg:grid-cols-12">
+      <div className="mx-auto max-w-7xl px-5 pb-10 pt-14 sm:px-8 lg:px-10 lg:pt-20">
+        <div className="grid gap-8 lg:grid-cols-12">
           <div className="lg:col-span-8">
             <p className="font-display text-[clamp(2.4rem,6vw,4.75rem)] leading-[1] tracking-[-0.03em]">
               Take a breath.
@@ -54,7 +54,7 @@ export default function Footer() {
           </nav>
         </div>
 
-        <div className="mt-20 flex flex-col gap-6 border-t border-paper/15 pt-8 text-sm text-paper/60 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-12 flex flex-col gap-6 border-t border-paper/15 pt-8 text-sm text-paper/60 sm:flex-row sm:items-center sm:justify-between">
           <Wordmark className="text-paper [&_svg]:text-sage" />
           <p className="max-w-md sm:text-right">
             A research prototype, not a medical diagnosis. Made by the SafeSpace AI team.

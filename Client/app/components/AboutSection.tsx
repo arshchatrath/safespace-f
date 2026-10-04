@@ -14,7 +14,7 @@ const signals = [
   {
     title: "Self-assessment",
     description:
-      "Seven stress items from the DASS-21 questionnaire add your own account of how things feel — the context no sensor can measure.",
+      "Seven stress items from the DASS-21 questionnaire add your own account of how things feel, which no sensor can measure.",
     tag: "7 questions",
     dot: "bg-pine",
   },
@@ -30,7 +30,7 @@ const signals = [
 const methods = [
   {
     name: "SHAP",
-    detail: "SHapley Additive exPlanations — feature importance grounded in game theory.",
+    detail: "SHapley Additive exPlanations, a game-theory method for estimating feature importance.",
   },
   {
     name: "LIME",
@@ -52,7 +52,7 @@ export default function AboutSection() {
   return (
     <section id="how-it-works" aria-labelledby="about-heading" className="scroll-mt-16">
       {/* Intro */}
-      <div className="mx-auto grid max-w-7xl gap-10 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-32">
+      <div className="mx-auto grid max-w-7xl gap-8 bg-sage-soft/35 px-5 py-14 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-20">
         <Reveal className="lg:col-span-4">
           <p className="eyebrow">(01) What it is</p>
         </Reveal>
@@ -61,10 +61,10 @@ export default function AboutSection() {
             <h2 id="about-heading" className="font-display text-[clamp(1.9rem,3.6vw,3.1rem)] leading-[1.12] tracking-[-0.02em] text-ink">
               Stress isn&rsquo;t one number. SafeSpace listens to your{" "}
               <em className="text-pine">body</em>, your <em className="text-pine">voice</em> and your{" "}
-              <em className="text-pine">own words</em>, and reads them together — a fuller picture than any single signal can give.
+              <em className="text-pine">own words</em>, then reads them together for a fuller picture than any one signal can give.
             </h2>
           </Reveal>
-          <div className="mt-12 grid gap-8 sm:grid-cols-2">
+          <div className="mt-9 grid gap-6 sm:grid-cols-2">
             <Reveal delay={100} className="flex gap-4">
               <Shield className="mt-1 h-5 w-5 shrink-0 text-pine" aria-hidden="true" />
               <div>
@@ -84,8 +84,8 @@ export default function AboutSection() {
       </div>
 
       {/* Three signals */}
-      <div className="border-t border-ink/10">
-        <div className="mx-auto grid max-w-7xl gap-10 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-28">
+      <div className="border-y border-ink/10 bg-ochre-soft/25">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-20">
           <div className="lg:col-span-4">
             <Reveal className="lg:sticky lg:top-28">
               <p className="eyebrow">(02) How it works</p>
@@ -107,10 +107,10 @@ export default function AboutSection() {
                 as="li"
                 key={signal.title}
                 delay={i * 80}
-                className="group grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 border-t border-ink/15 py-8 last:border-b sm:grid-cols-[5.5rem_1fr_auto] sm:gap-x-8 sm:py-10"
+                className="group grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 border-t border-ink/15 py-6 last:border-b sm:grid-cols-[4.5rem_1fr_auto] sm:gap-x-6 sm:py-7"
               >
                 <span className="font-display text-4xl leading-none text-ink/25 transition-colors duration-500 group-hover:text-pine sm:text-6xl">
-                  0{i + 1}
+                  <span className={i === 0 ? "text-clay" : i === 1 ? "text-pine" : "text-ochre-deep"}>0{i + 1}</span>
                 </span>
                 <div>
                   <h3 className="flex items-center gap-3 text-xl font-semibold text-ink sm:text-2xl">
@@ -129,9 +129,9 @@ export default function AboutSection() {
       </div>
 
       {/* Explainability */}
-      <div className="px-3 sm:px-5 lg:px-6">
+      <div className="bg-clay-soft/20 px-3 py-7 sm:px-5 sm:py-9 lg:px-6 lg:py-10">
         <div className="grain mx-auto max-w-[90rem] overflow-hidden rounded-[2rem] bg-pine-deep text-paper">
-          <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-28">
+          <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-12 lg:px-10 lg:py-18">
             <Reveal className="lg:col-span-5">
               <p className="eyebrow !text-sage">(03) Explainable by design</p>
               <h2 className="mt-5 font-display text-4xl leading-[1.05] tracking-[-0.02em] sm:text-5xl">
@@ -139,8 +139,8 @@ export default function AboutSection() {
                 <span className="mt-1 block italic text-sage">Every reading shows its reasons.</span>
               </h2>
               <p className="mt-6 max-w-md leading-relaxed text-paper/75">
-                SafeSpace doesn&rsquo;t just apply explainable AI — it compares techniques to find which best fits a
-                multimodal system, so you can see which signals moved your result and by how much.
+                SafeSpace doesn&rsquo;t just apply explainable AI. It compares techniques to find which best fits a
+                system using several kinds of data, so you can see which signals moved your result and by how much.
               </p>
             </Reveal>
 
@@ -159,14 +159,14 @@ export default function AboutSection() {
             </ul>
           </div>
 
-          <div className="mx-auto max-w-7xl px-5 pb-16 sm:px-8 lg:px-10 lg:pb-20">
-            <p className="eyebrow mb-6 !text-paper/60">Research impact</p>
+          <div className="mx-auto max-w-7xl px-5 pb-12 sm:px-8 lg:px-10 lg:pb-14">
+            <p className="eyebrow mb-4 !text-paper/60">Research impact</p>
             <dl className="grid grid-cols-1 border-t border-paper/15 sm:grid-cols-3">
               {stats.map((stat, i) => (
                 <Reveal
                   key={stat.label}
                   delay={i * 100}
-                  className={`py-6 sm:py-8 ${i > 0 ? "border-t border-paper/15 sm:border-l sm:border-t-0 sm:pl-8" : ""}`}
+                  className={`py-5 sm:py-6 ${i > 0 ? "border-t border-paper/15 sm:border-l sm:border-t-0 sm:pl-8" : ""}`}
                 >
                   <dt className="text-sm text-paper/65">{stat.label}</dt>
                   <dd className="mt-2 font-display text-5xl tracking-[-0.03em] sm:text-6xl">{stat.value}</dd>

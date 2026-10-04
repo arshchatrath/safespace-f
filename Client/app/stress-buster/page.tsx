@@ -82,7 +82,7 @@ export default function StressBusterPage() {
               Take a <span className="italic text-pine">little</span> break.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink/70">
-              A couple of light games for clearing your head between tasks — or after a stress check.
+              A couple of light games to clear your head between tasks, or after a stress check.
             </p>
             <Link href="/check" className="btn-ghost mt-8">
               Take the stress check

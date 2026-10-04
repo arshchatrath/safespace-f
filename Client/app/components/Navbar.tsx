@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import { Menu, X, Github, ArrowUpRight } from "lucide-react"
 import { Wordmark } from "./Logo"
 
-const GITHUB_URL = "https://github.com/arshchatrath/SafeSpace"
+const GITHUB_URL = "https://github.com/arshchatrath/safespace-f"
 
 const links = [
   { href: "/#how-it-works", label: "How it works" },

@@ -70,7 +70,7 @@ const contributors: Contributor[] = [
 
 export default function ContributorsSection() {
   return (
-    <section id="contributors" aria-labelledby="team-heading" className="scroll-mt-16 py-20 lg:py-32">
+    <section id="contributors" aria-labelledby="team-heading" className="scroll-mt-16 bg-sage-soft/30 py-14 lg:py-20">
       <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
         <Reveal className="grid gap-6 lg:grid-cols-12">
           <p className="eyebrow lg:col-span-4">(04) The team</p>
@@ -80,9 +80,9 @@ export default function ContributorsSection() {
           </h2>
         </Reveal>
 
-        <ul className="mt-14 grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 lg:mt-20 lg:grid-cols-4 lg:gap-y-14">
+        <ul className="mt-9 grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 lg:mt-12 lg:grid-cols-4 lg:gap-y-10">
           {contributors.map((contributor, i) => (
-            <Reveal as="li" key={contributor.name} delay={(i % 4) * 70} className={i % 2 === 1 ? "lg:mt-10" : ""}>
+            <Reveal as="li" key={contributor.name} delay={(i % 4) * 70} className="flex h-full">
               <ContributorCard contributor={contributor} tilt={i % 2 === 0 ? "motion-safe:group-hover:-rotate-[1.5deg]" : "motion-safe:group-hover:rotate-[1.5deg]"} />
             </Reveal>
           ))}
@@ -94,26 +94,22 @@ export default function ContributorsSection() {
 
 function ContributorCard({ contributor, tilt }: { contributor: Contributor; tilt: string }) {
   return (
-    <article className="group">
+    <article className="group flex h-full w-full flex-col rounded-xl border border-ink/10 bg-paper/70 p-2 transition-colors hover:bg-card">
       <div
-        className={`overflow-hidden rounded-2xl bg-muted transition-transform duration-500 ease-soft ${tilt} motion-safe:group-hover:-translate-y-1`}
+        className={`overflow-hidden rounded-lg bg-muted transition-transform duration-500 ease-soft ${tilt} motion-safe:group-hover:-translate-y-1`}
       >
         <img
           src={`/${contributor.img}`}
           alt={contributor.name}
           loading="lazy"
-          className="aspect-[4/5] w-full object-cover transition-transform duration-700 ease-soft motion-safe:group-hover:scale-[1.04]"
+          className="aspect-[4/3] w-full object-cover object-[center_24%] transition-transform duration-700 ease-soft motion-safe:group-hover:scale-[1.04]"
         />
       </div>
-      <div className="mt-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="font-display text-lg leading-tight text-ink sm:text-xl">{contributor.name}</h3>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground sm:text-sm">
-            {contributor.expertise.join(" · ")}
-          </p>
-        </div>
-        {(contributor.linkedin || contributor.github) && (
-          <div className="flex shrink-0 gap-0.5">
+      <div className="flex flex-1 flex-col px-2 pb-2 pt-3">
+        <div className="flex min-h-12 items-start justify-between gap-2">
+          <h3 className="font-display text-base leading-tight text-ink sm:text-lg">{contributor.name}</h3>
+          {(contributor.linkedin || contributor.github) && (
+            <div className="flex shrink-0 gap-0.5">
             {contributor.linkedin && (
               <a
                 href={`https://linkedin.com/in/${contributor.linkedin}`}
@@ -136,8 +132,21 @@ function ContributorCard({ contributor, tilt }: { contributor: Contributor; tilt
                 <Github className="h-4 w-4" aria-hidden="true" />
               </a>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+        <ul className="mt-2 flex min-h-[3.25rem] content-start flex-wrap gap-1.5" aria-label={`${contributor.name} contributions`}>
+          {contributor.expertise.map((keyword, index) => (
+            <li
+              key={keyword}
+              className={`rounded-full px-2 py-1 text-[0.65rem] font-medium leading-tight sm:text-xs ${
+                index % 3 === 0 ? "bg-sage-soft text-pine-deep" : index % 3 === 1 ? "bg-clay-soft text-clay-deep" : "bg-ochre-soft text-ochre-deep"
+              }`}
+            >
+              {keyword}
+            </li>
+          ))}
+        </ul>
       </div>
     </article>
   )
