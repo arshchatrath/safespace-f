@@ -22,7 +22,7 @@ const signals = [
     title: "Voice analysis",
     description:
       "Emotional cues in speech, such as pitch jitter and harmonic patterns, learned from the RAVDESS and IEMOCAP datasets.",
-    tag: "Optional",
+    tag: "Voice recording",
     dot: "bg-clay",
   },
 ]
@@ -43,7 +43,7 @@ const methods = [
 ]
 
 const stats = [
-  { value: "95%+", label: "Detection accuracy" },
+  { value: "73%+", label: "Detection accuracy" },
   { value: "<100ms", label: "Response latency" },
   { value: "3", label: "Modalities integrated" },
 ]
