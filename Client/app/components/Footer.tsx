@@ -1,25 +1,63 @@
 "use client"
 
-import { Github, Heart } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, Github } from "lucide-react"
+import { Wordmark } from "./Logo"
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-white py-12 sm:py-14 md:py-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <a
-            href="https://github.com/arshchatrath/SafeSpace"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-2 sm:space-x-3 text-blue-400 hover:text-blue-300 mb-4 sm:mb-6 text-lg sm:text-xl font-semibold transition-all duration-300 hover:scale-105"
-          >
-            <Github size={24} className="sm:w-7 sm:h-7" />
-            <span>GitHub Repository</span>
-          </a>
-          <p className="flex items-center justify-center space-x-2 sm:space-x-3 text-gray-400 text-base sm:text-lg">
-            <span>Made with</span>
-            <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-red-500 animate-pulse" fill="currentColor" />
-            <span>by SafeSpace AI Team</span>
+    <footer className="grain overflow-hidden bg-ink text-paper">
+      <div className="mx-auto max-w-7xl px-5 pb-10 pt-20 sm:px-8 lg:px-10 lg:pt-28">
+        <div className="grid gap-12 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <p className="font-display text-[clamp(2.4rem,6vw,4.75rem)] leading-[1] tracking-[-0.03em]">
+              Take a breath.
+              <br />
+              <span className="italic text-sage">Then take the check.</span>
+            </p>
+            <Link href="/check" className="btn group mt-10 bg-paper text-ink hover:bg-sage-soft">
+              Start the check
+              <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+            </Link>
+          </div>
+
+          <nav aria-label="Footer" className="lg:col-span-3 lg:col-start-10">
+            <ul className="space-y-3 text-paper/75">
+              <li>
+                <Link href="/#how-it-works" className="link-draw hover:text-paper">
+                  How it works
+                </Link>
+              </li>
+              <li>
+                <Link href="/stressbuster" className="link-draw hover:text-paper">
+                  StressBuster games
+                </Link>
+              </li>
+              <li>
+                <Link href="/#contributors" className="link-draw hover:text-paper">
+                  Team
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/arshchatrath/SafeSpace"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-draw inline-flex items-center gap-2 hover:text-paper"
+                >
+                  <Github className="h-4 w-4" aria-hidden="true" />
+                  GitHub repository
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+
+        <div className="mt-20 flex flex-col gap-6 border-t border-paper/15 pt-8 text-sm text-paper/60 sm:flex-row sm:items-center sm:justify-between">
+          <Wordmark className="text-paper [&_svg]:text-sage" />
+          <p className="max-w-md sm:text-right">
+            A research prototype, not a medical diagnosis. Made by the SafeSpace AI team.
           </p>
         </div>
       </div>

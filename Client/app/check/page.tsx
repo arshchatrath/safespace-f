@@ -2,15 +2,9 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useLayoutEffect, useRef } from "react"
 import { gsap } from "gsap"
-import { Mic, MicOff, Wifi, WifiOff, Activity, AlertCircle, CheckCircle } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Mic, Square, Upload, FileCheck2, AlertCircle, Check, Watch, AudioLines } from "lucide-react"
 import Results from "./results"
 
 const DASS21_QUESTIONS = [
@@ -23,6 +17,15 @@ const DASS21_QUESTIONS = [
   "I felt that I was rather touchy"                // q18(s)
 ]
 
+const SCALE = [
+  { value: 0, label: "Never" },
+  { value: 1, label: "Sometimes" },
+  { value: 2, label: "Often" },
+  { value: 3, label: "Almost always" },
+]
+
+const PHYSIO_EXTENSIONS = [".csv", ".json"]
+
 export default function CheckPage() {
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
@@ -32,29 +35,28 @@ export default function CheckPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [allDataReady, setAllDataReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [dropError, setDropError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   const pageRef = useRef<HTMLDivElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        ".check-section",
-        { y: 40, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, stagger: 0.15, ease: "power3.out" },
-      )
-    })
-
-    return () => ctx.revert()
+  useLayoutEffect(() => {
+    const mm = gsap.matchMedia()
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      gsap.from(".check-section", { y: 32, opacity: 0, duration: 0.9, stagger: 0.1, ease: "expo.out" })
+    }, pageRef)
+    return () => mm.revert()
   }, [])
 
   useEffect(() => {
     if (stressResult && resultsRef.current) {
-      gsap.fromTo(
-        resultsRef.current,
-        { scale: 0.9, opacity: 0, y: 30 },
-        { scale: 1, opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.7)" },
-      )
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      resultsRef.current.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })
+      if (!reduceMotion) {
+        gsap.fromTo(resultsRef.current, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.8, ease: "expo.out" })
+      }
     }
   }, [stressResult])
 
@@ -75,8 +77,22 @@ export default function CheckPage() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      setDropError(null)
       setUploadedFile(file)
     }
+  }
+
+  const handleFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (!file) return
+    if (!PHYSIO_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      setDropError("That file type isn't supported. Please use a .csv or .json file.")
+      return
+    }
+    setDropError(null)
+    setUploadedFile(file)
   }
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,89 +117,57 @@ export default function CheckPage() {
     }
   }
 
-//   const analyzeAllModalities = async () => {
-//   if (!allDataReady || !uploadedFile || !audioFile) return;
+  const analyzeAllModalities = async () => {
+    if (!allDataReady || !uploadedFile) return;
 
-//   setIsLoading(true);
-//   try {
-//     const formData = new FormData();
-//     formData.append("physiological_file", uploadedFile);
-//     formData.append("audio_file", audioFile);
-//     formData.append("questionnaire", JSON.stringify(dass21Responses));
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Convert DASS-21 integer responses to a comma-separated string
+      const dass21ResponseString = dass21Responses.join(",");
 
-//     const response = await fetch("http://localhost:8000/api/predict/comprehensive", {
-//       method: "POST",
-//       body: formData,
-//     });
+      const formData = new FormData();
+      formData.append("physiological_file", uploadedFile);
+      formData.append("dass21_responses", dass21ResponseString);
 
-//     const result = await response.json();
-//     setStressResult(result);
-//   } catch (error) {
-//     console.error("Error analyzing comprehensive data:", error);
-//   } finally {
-//     setIsLoading(false);
-//   }
-// };
+      // Add voice probabilities if audio file is available
+      if (audioFile) {
+        // For now, we'll use a default voice probability distribution
+        // In a real implementation, you would process the audio file
+        const voiceProbs = [0.33, 0.34, 0.33]; // Default uniform distribution
+        formData.append("voice_probabilities", voiceProbs.join(","));
+      }
 
-const analyzeAllModalities = async () => {
-  if (!allDataReady || !uploadedFile) return;
+      // Debug prints
+      console.log("✅ Sending physiological_file:", uploadedFile.name);
+      console.log("✅ DASS-21 Responses:", dass21ResponseString);
+      if (audioFile) {
+        console.log("✅ Voice probabilities:", [0.33, 0.34, 0.33]);
+      }
 
-  setIsLoading(true);
-  try {
-    // Convert DASS-21 integer responses to a comma-separated string
-    const dass21ResponseString = dass21Responses.join(",");
+      const response = await fetch("http://localhost:8000/predict", {
+        method: "POST",
+        body: formData,
+      });
 
-    const formData = new FormData();
-    formData.append("physiological_file", uploadedFile);
-    formData.append("dass21_responses", dass21ResponseString);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    // Add voice probabilities if audio file is available
-    if (audioFile) {
-      // For now, we'll use a default voice probability distribution
-      // In a real implementation, you would process the audio file
-      const voiceProbs = [0.33, 0.34, 0.33]; // Default uniform distribution
-      formData.append("voice_probabilities", voiceProbs.join(","));
+      const result = await response.json();
+      console.log("✅ API Response:", result);
+      setStressResult(result);
+    } catch (error) {
+      console.error("❌ Error analyzing comprehensive data:", error);
+      setError(
+        error instanceof Error && error.message.startsWith("HTTP error")
+          ? `The analysis service returned an error (${error.message.replace("HTTP error! ", "")}). Please check your file and try again.`
+          : "Something went wrong while analyzing. Make sure the SafeSpace API is running, then try again.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-
-    // Debug prints
-    console.log("✅ Sending physiological_file:", uploadedFile.name);
-    console.log("✅ DASS-21 Responses:", dass21ResponseString);
-    if (audioFile) {
-      console.log("✅ Voice probabilities:", [0.33, 0.34, 0.33]);
-    }
-
-    const response = await fetch("http://localhost:8000/predict", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log("✅ API Response:", result);
-    setStressResult(result);
-  } catch (error) {
-    console.error("❌ Error analyzing comprehensive data:", error);
-    // You might want to show an error message to the user here
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-  const getStressColor = (level: string) => {
-    switch (level?.toLowerCase()) {
-      case "low":
-        return "text-green-600 bg-green-50 border-green-200"
-      case "moderate":
-        return "text-orange-600 bg-orange-50 border-orange-200"
-      case "high":
-        return "text-red-600 bg-red-50 border-red-200"
-      default:
-        return "text-gray-600 bg-gray-50 border-gray-200"
-    }
-  }
+  };
 
   const getCompletionPercentage = () => {
     let completed = 0
@@ -192,242 +176,404 @@ const analyzeAllModalities = async () => {
     return completed
   }
 
+  const hasQuestionnaire = dass21Responses.some((response) => response > 0)
+  const completion = getCompletionPercentage()
+
+  const checklist = [
+    { id: "step-physio", label: "Physiological data", done: !!uploadedFile, required: true },
+    { id: "step-questionnaire", label: "Questionnaire", done: hasQuestionnaire, required: true },
+    { id: "step-voice", label: "Voice", done: !!audioFile, required: false },
+  ]
+
+  const statusMessage = isLoading
+    ? "Analyzing your data."
+    : error
+      ? error
+      : stressResult?.predictions?.prediction_label
+        ? `Analysis complete. Predicted stress level: ${stressResult.predictions.prediction_label}.`
+        : ""
+
   return (
-    <main
-      ref={pageRef}
-      id="check-page-main"
-      className="min-h-screen bg-gradient-to-br from-blue-50 via-teal-50 to-purple-50 py-4 sm:py-6 md:py-8 pt-[120px] scroll-mt-[120px]"
-      style={{ scrollMarginTop: '120px' }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-8 sm:mb-10 md:mb-12">
-          <div className="pt-8 sm:pt-12 md:pt-16"></div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-3 sm:mb-4 md:mb-6">
-            Comprehensive Stress Analysis
-          </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-6 sm:mb-8">
-            Complete all three assessments for accurate multimodal stress detection
-          </p>
-
-          {/* Progress Indicator */}
-          <div className="max-w-md mx-auto mb-6 sm:mb-8">
-            <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span>Assessment Progress</span>
-              <span>{getCompletionPercentage()}%</span>
-            </div>
-            <Progress value={getCompletionPercentage()} className="h-2 sm:h-3" />
+    <main ref={pageRef} id="main" className="min-h-screen pb-24 pt-28 sm:pt-32">
+      <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+        {/* Header */}
+        <header className="check-section grid gap-6 border-b border-ink/15 pb-10 lg:grid-cols-12 lg:pb-14">
+          <p className="eyebrow lg:col-span-4 lg:pt-4">Stress check · 3 steps</p>
+          <div className="lg:col-span-8">
+            <h1 className="font-display text-[clamp(2.5rem,6vw,4.75rem)] leading-[0.98] tracking-[-0.03em] text-ink">
+              Let&rsquo;s see how you&rsquo;re <span className="italic text-pine">really</span> doing.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink/70">
+              Add your physiological data and answer seven short statements. A voice sample is optional, but it helps
+              the reading.
+            </p>
           </div>
+        </header>
 
-          {!allDataReady && (
-            <Alert className="max-w-2xl mx-auto mb-6 sm:mb-8">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-sm sm:text-base">
-                Please complete Physiological Data and Questionnaire for analysis. Voice recording is optional but recommended for enhanced accuracy.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
-          {/* Left Column - Input Methods */}
-          <div className="space-y-6 sm:space-y-8">
-            {/* Hardware Integration Section */}
-            <Card className="check-section border-0 shadow-lg sm:shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="pb-4 sm:pb-6">
-                <CardTitle className="flex items-center space-x-2 sm:space-x-3 text-lg sm:text-xl md:text-2xl">
-                  <Activity className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-blue-600" />
-                  <span>Physiological Data</span>
-                  {uploadedFile && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 sm:space-y-6">
-                <div className="flex items-center justify-between p-4 sm:p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl sm:rounded-2xl border">
-                  <div className="flex items-center space-x-3 sm:space-x-4">
-                    {deviceConnected ? (
-                      <Wifi className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-green-600" />
+        <div className="mt-10 grid gap-10 lg:mt-14 lg:grid-cols-12 lg:gap-12">
+          {/* Steps */}
+          <div className="space-y-6 lg:col-span-8">
+            {/* 01 Physiological */}
+            <StepSection
+              id="step-physio"
+              number="01"
+              title="Physiological data"
+              done={!!uploadedFile}
+              required
+              intro="Signals from a wearable — EDA, ECG, temperature and movement — exported as a file."
+            >
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleFileDrop}
+              >
+                <input
+                  id="file-upload"
+                  type="file"
+                  accept=".csv,.json"
+                  onChange={handleFileUpload}
+                  className="peer sr-only"
+                  aria-describedby="file-upload-hint"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className={`flex cursor-pointer flex-col items-start gap-4 rounded-2xl border-[1.5px] border-dashed p-6 transition-colors duration-300 peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card sm:flex-row sm:items-center sm:p-8 ${
+                    isDragging
+                      ? "border-pine bg-sage-soft"
+                      : uploadedFile
+                        ? "border-pine/40 bg-sage-soft/60"
+                        : "border-ink/20 hover:border-ink/40 hover:bg-muted/50"
+                  }`}
+                >
+                  <span
+                    className={`grid h-12 w-12 shrink-0 place-items-center rounded-full ${uploadedFile ? "bg-pine text-paper" : "bg-muted text-ink"}`}
+                  >
+                    {uploadedFile ? <FileCheck2 className="h-5 w-5" aria-hidden="true" /> : <Upload className="h-5 w-5" aria-hidden="true" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    {uploadedFile ? (
+                      <>
+                        <span className="block truncate font-semibold text-ink">{uploadedFile.name}</span>
+                        <span className="mt-0.5 block text-sm text-muted-foreground">
+                          {formatBytes(uploadedFile.size)} · uploaded
+                        </span>
+                      </>
                     ) : (
-                      <WifiOff className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-gray-400" />
+                      <>
+                        <span className="block font-semibold text-ink">Upload physiological data</span>
+                        <span id="file-upload-hint" className="mt-0.5 block text-sm text-muted-foreground">
+                          Drop a CSV or JSON file here, or browse your files.
+                        </span>
+                      </>
                     )}
-                    <span
-                      className={`text-sm sm:text-base font-semibold ${deviceConnected ? "text-green-600" : "text-gray-600"}`}
-                    >
-                      {deviceConnected ? "Device Connected ✅" : "No Device Connected"}
-                    </span>
-                  </div>
-                  <Button
-                    onClick={simulateDeviceConnection}
-                    variant={deviceConnected ? "destructive" : "default"}
-                    size="sm"
-                    className="rounded-lg sm:rounded-xl text-xs sm:text-sm"
-                  >
-                    {deviceConnected ? "Disconnect" : "Connect"}
-                  </Button>
-                </div>
+                  </span>
+                  <span className="rounded-full border border-ink/20 px-4 py-2 text-sm font-semibold text-ink">
+                    {uploadedFile ? "Replace" : "Browse"}
+                  </span>
+                </label>
+                {dropError && (
+                  <p role="alert" className="mt-3 flex items-center gap-2 text-sm text-clay-deep">
+                    <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {dropError}
+                  </p>
+                )}
+              </div>
 
-                <div>
-                  <Label
-                    htmlFor="file-upload"
-                    className="block text-sm sm:text-base md:text-lg font-semibold mb-2 sm:mb-4"
-                  >
-                    Upload Physiological Data (CSV/JSON)
-                  </Label>
-                  <div className="flex items-center space-x-2 sm:space-x-4">
-                    <Input
-                      id="file-upload"
-                      type="file"
-                      accept=".csv,.json"
-                      onChange={handleFileUpload}
-                      className="flex-1 p-3 sm:p-4 text-sm sm:text-base md:text-lg rounded-lg sm:rounded-xl"
-                    />
-                  </div>
-                  {uploadedFile && (
-                    <p className="text-green-600 mt-2 font-medium text-sm sm:text-base flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>{uploadedFile.name} uploaded</span>
+              <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl bg-muted/60 px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <Watch className={`h-5 w-5 ${deviceConnected ? "text-pine" : "text-ink/40"}`} aria-hidden="true" />
+                  <div>
+                    <p id="device-label" className="text-sm font-semibold text-ink">
+                      Wearable device
                     </p>
-                  )}
+                    <p className="text-sm text-muted-foreground">{deviceConnected ? "Connected" : "Not connected"}</p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={deviceConnected}
+                  aria-labelledby="device-label"
+                  onClick={simulateDeviceConnection}
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-300 ${deviceConnected ? "bg-pine" : "bg-ink/20"}`}
+                >
+                  <span
+                    className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-paper shadow transition-transform duration-300 ease-soft ${deviceConnected ? "translate-x-5" : ""}`}
+                  />
+                </button>
+              </div>
+            </StepSection>
 
-            {/* Voice Recording Section */}
-            <Card className="check-section border-0 shadow-lg sm:shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="pb-4 sm:pb-6">
-                <CardTitle className="flex items-center space-x-2 sm:space-x-3 text-lg sm:text-xl md:text-2xl">
-                  <Mic className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-teal-600" />
-                  <span>Voice Analysis</span>
-                  {(audioFile || isRecording) && <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 sm:space-y-6">
-                <div className="text-center space-y-4 sm:space-y-6">
-                  <Button
-                    onClick={toggleRecording}
-                    className={`w-28 h-28 sm:w-32 sm:h-32 md:w-40 md:h-40 rounded-full text-white font-bold text-base sm:text-lg md:text-xl ${
-                      isRecording
-                        ? "bg-red-500 hover:bg-red-600 animate-pulse shadow-2xl shadow-red-500/50"
-                        : "bg-teal-600 hover:bg-teal-700 shadow-2xl shadow-teal-500/50"
-                    } transition-all duration-300 hover:scale-105`}
-                  >
-                    {isRecording ? (
-                      <div className="flex flex-col items-center">
-                        <MicOff className="w-8 h-8 sm:w-10 sm:h-10 md:w-16 md:h-16 mb-1 sm:mb-2" />
-                        <span className="text-xs sm:text-sm">Recording...</span>
+            {/* 02 Questionnaire */}
+            <StepSection
+              id="step-questionnaire"
+              number="02"
+              title="Questionnaire"
+              done={hasQuestionnaire}
+              required
+              intro="Seven statements from the DASS-21 stress scale. How often did each apply to you recently?"
+            >
+              <ol className="divide-y divide-ink/10 border-y border-ink/10">
+                {DASS21_QUESTIONS.map((question, index) => (
+                  <li key={index} className="py-6">
+                    <fieldset>
+                      <legend className="float-left mb-4 flex w-full gap-3 text-base font-medium leading-snug text-ink sm:text-lg">
+                        <span className="pt-0.5 font-mono text-xs text-muted-foreground sm:pt-1">{String(index + 1).padStart(2, "0")}</span>
+                        <span>{question}</span>
+                      </legend>
+                      <div className="clear-both grid grid-cols-4 gap-1.5 sm:gap-2">
+                        {SCALE.map((option) => {
+                          const inputId = `q${index}-${option.value}`
+                          const checked = dass21Responses[index] === option.value
+                          return (
+                            <div key={option.value}>
+                              <input
+                                type="radio"
+                                id={inputId}
+                                name={`dass21-${index}`}
+                                value={option.value}
+                                checked={checked}
+                                onChange={() => handleDass21Change(index, option.value)}
+                                className="peer sr-only"
+                              />
+                              <label
+                                htmlFor={inputId}
+                                className={`flex h-full min-h-[64px] cursor-pointer flex-col items-center justify-center rounded-xl border px-1 py-2 text-center transition-[background-color,border-color,color,transform] duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card motion-safe:active:scale-[0.97] ${
+                                  checked
+                                    ? "border-pine bg-pine text-paper"
+                                    : "border-ink/15 text-ink hover:border-ink/40 hover:bg-muted/60"
+                                }`}
+                              >
+                                <span className="font-display text-xl leading-none sm:text-2xl">{option.value}</span>
+                                <span className={`mt-1 text-[0.7rem] leading-tight sm:text-xs ${checked ? "text-paper/85" : "text-muted-foreground"}`}>
+                                  {option.label}
+                                </span>
+                              </label>
+                            </div>
+                          )
+                        })}
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <Mic className="w-8 h-8 sm:w-10 sm:h-10 md:w-16 md:h-16 mb-1 sm:mb-2" />
-                        <span className="text-xs sm:text-sm">Start</span>
-                      </div>
-                    )}
-                  </Button>
-                  <p className="text-gray-600 font-medium text-sm sm:text-base">
-                    {isRecording ? "Recording your voice... Click to stop" : "Click to start voice recording"}
+                    </fieldset>
+                  </li>
+                ))}
+              </ol>
+            </StepSection>
+
+            {/* 03 Voice */}
+            <StepSection
+              id="step-voice"
+              number="03"
+              title="Voice"
+              done={!!(audioFile || isRecording)}
+              intro="Say a few sentences about your day, or upload a short recording."
+            >
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  aria-pressed={isRecording}
+                  className={`group relative grid h-24 w-24 shrink-0 place-items-center rounded-full text-paper transition-[background-color,transform] duration-300 ease-soft motion-safe:hover:scale-[1.04] ${
+                    isRecording ? "bg-clay-deep" : "bg-pine hover:bg-pine-deep"
+                  }`}
+                >
+                  {isRecording && <span className="absolute inset-0 rounded-full bg-clay/40 motion-safe:animate-ping" aria-hidden="true" />}
+                  {isRecording ? <Square className="relative h-6 w-6 fill-current" aria-hidden="true" /> : <Mic className="relative h-7 w-7" aria-hidden="true" />}
+                  <span className="sr-only">{isRecording ? "Stop recording" : "Start voice recording"}</span>
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex h-8 items-end gap-1" aria-hidden="true">
+                    {Array.from({ length: 18 }, (_, i) => (
+                      <span
+                        key={i}
+                        className={`w-1.5 rounded-full transition-colors duration-300 ${isRecording ? "animate-level bg-clay" : audioFile ? "bg-pine/60" : "bg-ink/15"}`}
+                        style={{
+                          height: `${30 + ((i * 37) % 70)}%`,
+                          animationDelay: `${(i % 6) * -0.15}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-3 text-sm font-medium text-ink" aria-live="polite">
+                    {isRecording
+                      ? "Recording… tap to stop."
+                      : audioFile && audioFile.name === "recorded_audio.wav"
+                        ? "Voice recorded successfully."
+                        : audioFile
+                          ? `${audioFile.name} uploaded.`
+                          : "Tap the microphone to record."}
                   </p>
                 </div>
+              </div>
 
-                <div className="border-t pt-4 sm:pt-6">
-                  <Label
-                    htmlFor="audio-upload"
-                    className="block text-sm sm:text-base md:text-lg font-semibold mb-2 sm:mb-4"
-                  >
-                    Or Upload Audio File
-                  </Label>
-                  <Input
+              <div className="mt-6 flex flex-col gap-3 border-t border-ink/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3 or M4A.</p>
+                <div>
+                  <input
                     id="audio-upload"
                     type="file"
                     accept=".wav,.mp3,.m4a"
                     onChange={handleAudioUpload}
-                    className="p-3 sm:p-4 text-sm sm:text-base md:text-lg rounded-lg sm:rounded-xl"
+                    className="peer sr-only"
                   />
-                  {audioFile && audioFile.name !== "recorded_audio.wav" && (
-                    <p className="text-green-600 mt-2 font-medium text-sm sm:text-base flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>{audioFile.name} uploaded</span>
-                    </p>
-                  )}
-                  {audioFile && audioFile.name === "recorded_audio.wav" && (
-                    <p className="text-green-600 mt-2 font-medium text-sm sm:text-base flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Voice recorded successfully</span>
-                    </p>
-                  )}
+                  <label
+                    htmlFor="audio-upload"
+                    className="btn-ghost cursor-pointer !min-h-[40px] !py-2 text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card"
+                  >
+                    <AudioLines className="h-4 w-4" aria-hidden="true" />
+                    Upload audio file
+                  </label>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </StepSection>
+          </div>
 
-            {/* DASS-21 Questionnaire */}
-            <Card className="check-section border-0 shadow-lg sm:shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader className="pb-4 sm:pb-6">
-                <CardTitle className="flex items-center space-x-2 sm:space-x-3 text-lg sm:text-xl md:text-2xl">
-                  <span>DASS-21 Questionnaire</span>
-                  {dass21Responses.some((response) => response > 0) && (
-                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
-                  )}
-                </CardTitle>
-                <p className="text-gray-600 font-medium text-sm sm:text-base">
-                  Rate each statement: 0 = Never, 1 = Sometimes, 2 = Often, 3 = Almost Always
+          {/* Summary */}
+          <aside className="check-section lg:col-span-4" aria-label="Check summary">
+            <div className="rounded-3xl bg-ink p-6 text-paper sm:p-8 lg:sticky lg:top-24">
+              <div className="flex items-end justify-between">
+                <p className="eyebrow !text-paper/60">Your check</p>
+                <p className="font-display text-4xl leading-none tracking-tight">
+                  {completion}
+                  <span className="text-xl text-paper/60">%</span>
                 </p>
-              </CardHeader>
-              <CardContent className="space-y-4 sm:space-y-6 max-h-80 sm:max-h-96 overflow-y-auto">
-                {DASS21_QUESTIONS.map((question, index) => (
-                  <div key={index} className="space-y-2 sm:space-y-3 p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl">
-                    <Label className="font-medium text-gray-800 text-sm sm:text-base">
-                      {index + 1}. {question}
-                    </Label>
-                    <div className="flex space-x-2 sm:space-x-3">
-                      {[0, 1, 2, 3].map((value) => (
-                        <Button
-                          key={value}
-                          variant={dass21Responses[index] === value ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleDass21Change(index, value)}
-                          className="w-10 h-8 sm:w-12 sm:h-10 md:w-16 md:h-12 text-sm sm:text-base md:text-lg font-semibold rounded-lg sm:rounded-xl"
+              </div>
+              <div
+                className="mt-4 h-1.5 overflow-hidden rounded-full bg-paper/15"
+                role="progressbar"
+                aria-label="Required steps completed"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={completion}
+              >
+                <div className="h-full rounded-full bg-sage transition-[width] duration-700 ease-soft" style={{ width: `${completion}%` }} />
+              </div>
+
+              <ul className="mt-6 divide-y divide-paper/10 border-y border-paper/10">
+                {checklist.map((item) => (
+                  <li key={item.id}>
+                    <a href={`#${item.id}`} className="flex items-center justify-between gap-3 py-3.5 transition-colors hover:text-sage">
+                      <span className="flex items-center gap-3">
+                        <span
+                          className={`grid h-5 w-5 place-items-center rounded-full border transition-colors duration-300 ${
+                            item.done ? "border-sage bg-sage text-ink" : "border-paper/30"
+                          }`}
+                          aria-hidden="true"
                         >
-                          {value}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+                          {item.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </span>
+                        <span className="text-[0.95rem]">{item.label}</span>
+                        <span className="sr-only">{item.done ? "(done)" : "(not done)"}</span>
+                      </span>
+                      <span className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-paper/50">
+                        {item.required ? "Required" : "Optional"}
+                      </span>
+                    </a>
+                  </li>
                 ))}
-              </CardContent>
-            </Card>
-          </div>
+              </ul>
 
-          {/* Right Column - Analysis & Results */}
-          <div className="space-y-6 sm:space-y-8">
-            {/* Analysis Button */}
-            <Card className="check-section border-0 shadow-lg sm:shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardContent className="p-6 sm:p-8 text-center">
-                <Button
-                  onClick={analyzeAllModalities}
-                  disabled={!allDataReady || isLoading}
-                  className="w-full py-4 sm:py-6 text-base sm:text-lg md:text-xl font-bold bg-gradient-to-r from-blue-600 via-teal-600 to-purple-600 hover:from-blue-700 hover:via-teal-700 hover:to-purple-700 text-white rounded-xl sm:rounded-2xl shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 hover:scale-105"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center justify-center space-x-3">
-                      <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-white"></div>
-                      <span>Analyzing...</span>
-                    </div>
-                  ) : (
-                    "Analyze Stress Level"
-                  )}
-                </Button>
-                {!allDataReady && (
-                  <p className="text-gray-500 mt-3 sm:mt-4 text-sm sm:text-base">
-                    Complete Physiological Data and Questionnaire to enable analysis
-                  </p>
+              {error && (
+                <div className="mt-6 flex gap-3 rounded-2xl bg-clay-soft p-4 text-sm text-clay-deep">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <p>{error}</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={analyzeAllModalities}
+                disabled={!allDataReady || isLoading}
+                className="btn mt-6 w-full bg-sage text-base text-ink hover:bg-sage-soft focus-visible:outline-paper disabled:bg-paper/15 disabled:text-paper/60 disabled:opacity-100"
+              >
+                {isLoading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink/30 border-t-ink" aria-hidden="true" />
+                    Analyzing…
+                  </>
+                ) : (
+                  "Analyze stress level"
                 )}
-              </CardContent>
-            </Card>
+              </button>
 
-            {/* Results */}
-            <Results result={stressResult} isLoading={isLoading} />
+              {!allDataReady && (
+                <p className="mt-4 text-sm leading-relaxed text-paper/60">
+                  {uploadedFile && !hasQuestionnaire
+                    ? "Rate at least one statement above 0 to continue."
+                    : "Add physiological data and answer the questionnaire to continue."}
+                </p>
+              )}
 
-
-          </div>
+              <p className="sr-only" role="status" aria-live="polite">
+                {statusMessage}
+              </p>
+            </div>
+          </aside>
         </div>
+
+        {/* Results */}
+        <section ref={resultsRef} id="results" aria-labelledby="results-heading" className="mt-20 scroll-mt-24 lg:mt-28">
+          <div className="mb-8 flex items-baseline justify-between gap-4 border-b border-ink/15 pb-6">
+            <h2 id="results-heading" className="font-display text-3xl tracking-[-0.02em] text-ink sm:text-4xl">
+              Your reading
+            </h2>
+            <p className="eyebrow">Results</p>
+          </div>
+          <Results result={stressResult} isLoading={isLoading} />
+        </section>
       </div>
     </main>
   )
+}
+
+function StepSection({
+  id,
+  number,
+  title,
+  intro,
+  done,
+  required = false,
+  children,
+}: {
+  id: string
+  number: string
+  title: string
+  intro: string
+  done: boolean
+  required?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <section id={id} aria-labelledby={`${id}-title`} className="check-section scroll-mt-24 rounded-3xl border border-ink/10 bg-card p-5 sm:p-8">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="flex gap-4 sm:gap-5">
+          <span className="font-display text-2xl leading-none text-ink/30 sm:text-3xl">{number}</span>
+          <div>
+            <h2 id={`${id}-title`} className="font-display text-2xl leading-tight tracking-[-0.01em] text-ink sm:text-3xl">
+              {title}
+            </h2>
+            <p className="mt-2 max-w-xl text-[0.95rem] leading-relaxed text-muted-foreground">{intro}</p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.12em] transition-colors duration-300 ${
+            done ? "bg-pine text-paper" : "border border-ink/15 text-ink/60"
+          }`}
+        >
+          {done && <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />}
+          {done ? "Done" : required ? "Required" : "Optional"}
+        </span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

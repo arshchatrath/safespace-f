@@ -1,24 +1,8 @@
 "use client"
 
 import React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
-import { 
-  Activity, 
-  Brain, 
-  Mic, 
-  FileText, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle,
-  CheckCircle,
-  Info,
-  BarChart3,
-  Lightbulb,
-  Clock,
-  Zap
-} from "lucide-react"
+import Link from "next/link"
+import { Activity, Mic, FileText, ArrowUpRight, ArrowDownRight, ArrowRight, Info } from "lucide-react"
 
 interface StressResult {
   success: boolean
@@ -81,327 +65,305 @@ interface ResultsProps {
   isLoading: boolean
 }
 
+const LEVELS = ["Low", "Medium", "High"] as const
+const LEVEL_BAR = ["bg-sage", "bg-ochre", "bg-clay"]
+
+const LEVEL_STYLES: Record<string, { panel: string; accent: string; note: string }> = {
+  low: {
+    panel: "bg-sage-soft",
+    accent: "text-pine",
+    note: "Your signals look fairly settled right now. Keep doing what's working.",
+  },
+  medium: {
+    panel: "bg-ochre-soft",
+    accent: "text-ochre-deep",
+    note: "There are some signs of strain. A short pause, a walk or a few slow breaths can help.",
+  },
+  high: {
+    panel: "bg-clay-soft",
+    accent: "text-clay-deep",
+    note: "Several signals point to high stress. Be kind to yourself, and consider talking to someone you trust or a professional.",
+  },
+}
+
+const pct = (value: number | undefined | null) => `${((value ?? 0) * 100).toFixed(1)}%`
+
+const formatFeatureName = (feature: string) => {
+  return feature
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (l) => l.toUpperCase())
+    .replace("Dass21", "DASS-21")
+}
+
 const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
   if (isLoading) {
     return (
-      <Card className="border-0 shadow-2xl bg-white/90 backdrop-blur-sm">
-        <CardContent className="p-8 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h3 className="text-xl font-bold text-gray-700 mb-2">Analyzing Your Data</h3>
-          <p className="text-gray-500">Processing physiological signals, voice patterns, and questionnaire responses...</p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center rounded-3xl border border-ink/10 bg-card px-6 py-16 text-center">
+        <div className="relative h-20 w-20" aria-hidden="true">
+          <div className="animate-breathe absolute inset-0 rounded-full bg-sage/30" />
+          <div className="animate-breathe absolute inset-4 rounded-full bg-sage" style={{ animationDelay: "-0.4s" }} />
+        </div>
+        <h3 className="mt-6 font-display text-2xl text-ink">Analyzing your data</h3>
+        <p className="mt-2 max-w-md text-muted-foreground">
+          Processing physiological signals, voice patterns and questionnaire responses…
+        </p>
+      </div>
     )
   }
 
   if (!result) {
     return (
-      <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardContent className="p-8 text-center">
-          <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-gray-600 mb-2">
-            Ready for Comprehensive Analysis
-          </h3>
-          <p className="text-gray-500">
-            Complete all three assessment methods to receive your detailed multimodal stress analysis.
+      <div className="flex flex-col items-start gap-4 rounded-3xl border-[1.5px] border-dashed border-ink/15 px-6 py-10 sm:flex-row sm:items-center sm:px-8">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-muted">
+          <Activity className="h-5 w-5 text-ink/50" aria-hidden="true" />
+        </span>
+        <div>
+          <h3 className="font-semibold text-ink">Ready when you are</h3>
+          <p className="mt-1 text-muted-foreground">
+            Complete the required steps and press <span className="font-medium text-ink">Analyze stress level</span>. Your
+            reading and its explanation will appear here.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
 
-  const getStressLevelColor = (level: string) => {
-    switch (level.toLowerCase()) {
-      case "low":
-        return "text-green-600 bg-green-50 border-green-200"
-      case "medium":
-        return "text-orange-600 bg-orange-50 border-orange-200"
-      case "high":
-        return "text-red-600 bg-red-50 border-red-200"
-      default:
-        return "text-gray-600 bg-gray-50 border-gray-200"
-    }
+  const { predictions, explanations, metadata } = result
+  const label = predictions.prediction_label ?? ""
+  const levelKey = label.toLowerCase() === "moderate" ? "medium" : label.toLowerCase()
+  const style = LEVEL_STYLES[levelKey] ?? {
+    panel: "bg-muted",
+    accent: "text-ink",
+    note: "",
   }
+  const dassTotal = metadata.dass21_values.reduce((a, b) => a + b, 0)
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.8) return "text-green-600"
-    if (confidence >= 0.6) return "text-orange-600"
-    return "text-red-600"
-  }
+  const modalities = [
+    {
+      name: "Physiological",
+      icon: Activity,
+      probs: predictions.physio_probs,
+      meta: `${metadata.physio_windows} windows analyzed`,
+    },
+    {
+      name: "Questionnaire",
+      icon: FileText,
+      probs: predictions.dass21_probs,
+      meta: `Total score: ${dassTotal}/21`,
+    },
+    {
+      name: "Voice",
+      icon: Mic,
+      probs: predictions.voice_probs,
+      meta: metadata.voice_provided ? "Voice data provided" : "Voice data not provided",
+    },
+  ]
 
-  const formatFeatureName = (feature: string) => {
-    return feature
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, l => l.toUpperCase())
-      .replace("Dass21", "DASS-21")
-  }
+  const physioFactors = explanations?.physiological
+  const questionnaireFactors = explanations?.questionnaire
+  const fusion = explanations?.fusion
 
   return (
     <div className="space-y-6">
-      {/* Main Prediction Result */}
-      <Card className={`border-2 shadow-2xl ${getStressLevelColor(result.predictions.prediction_label)} bg-white/95 backdrop-blur-sm`}>
-        <CardHeader className="text-center pb-4">
-          <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
-            <Zap className="w-6 h-6" />
-            Stress Analysis Results
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Primary Result */}
-          <div className="text-center">
-            <div className="text-6xl font-bold mb-2">
-              {result.predictions.prediction_label}
-            </div>
-            <div className="text-lg text-gray-600 mb-4">
-              Stress Level Prediction
-            </div>
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <span className="text-sm text-gray-500">Confidence:</span>
-              <Badge className={`${getConfidenceColor(result.predictions.confidence)} bg-white border`}>
-                {(result.predictions.confidence * 100).toFixed(1)}%
-              </Badge>
-            </div>
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Main reading */}
+        <div className={`grain overflow-hidden rounded-3xl p-6 sm:p-8 lg:col-span-5 ${style.panel}`}>
+          <p className="eyebrow">Predicted stress level</p>
+          <p className={`mt-4 font-display text-[clamp(3.5rem,9vw,6rem)] leading-[0.9] tracking-[-0.04em] ${style.accent}`}>
+            {label}
+          </p>
+          <p className="mt-4 text-ink/70">
+            <span className="font-semibold text-ink">{pct(predictions.confidence)}</span> confidence
+          </p>
+
+          <div className="mt-8">
+            <p className="mb-3 text-sm font-semibold text-ink">Prediction probabilities</p>
+            <ProbabilityBar probs={predictions.fusion_probs} large />
+            <dl className="mt-3 grid grid-cols-3 gap-2">
+              {LEVELS.map((level, index) => (
+                <div key={level}>
+                  <dt className="flex items-center gap-1.5 text-xs text-ink/60">
+                    <span className={`h-2 w-2 rounded-full ${LEVEL_BAR[index]}`} aria-hidden="true" />
+                    {level}
+                  </dt>
+                  <dd className="mt-0.5 font-display text-xl text-ink sm:text-2xl">{pct(predictions.fusion_probs[index])}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
 
-          {/* Fusion Probabilities */}
-          <div className="space-y-3">
-            <h4 className="font-semibold text-lg flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              Prediction Probabilities
-            </h4>
-            <div className="grid grid-cols-3 gap-3">
-              {["Low", "Medium", "High"].map((level, index) => (
-                <div key={level} className="text-center p-3 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-700">
-                    {(result.predictions.fusion_probs[index] * 100).toFixed(1)}%
-                  </div>
-                  <div className="text-sm text-gray-500">{level}</div>
-                  <Progress 
-                    value={result.predictions.fusion_probs[index] * 100} 
-                    className="mt-2 h-2"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          {style.note && <p className="mt-8 border-t border-ink/10 pt-6 leading-relaxed text-ink/80">{style.note}</p>}
+          {(levelKey === "medium" || levelKey === "high") && (
+            <Link href="/stressbuster" className="link-draw mt-4 inline-flex items-center gap-2 font-semibold text-ink">
+              Take a break with StressBuster
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
+        </div>
 
-      {/* Individual Modality Results */}
-      <div className="grid md:grid-cols-3 gap-4">
-        {/* Physiological Results */}
-        <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Activity className="w-5 h-5 text-blue-600" />
-              Physiological
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              {["Low", "Medium", "High"].map((level, index) => (
-                <div key={level} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">{level}</span>
-                  <span className="text-sm font-semibold">
-                    {(result.predictions.physio_probs[index] * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="text-xs text-gray-500">
-              {result.metadata.physio_windows} windows analyzed
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* DASS-21 Results */}
-        <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="w-5 h-5 text-purple-600" />
-              Questionnaire
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              {["Low", "Medium", "High"].map((level, index) => (
-                <div key={level} className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">{level}</span>
-                  <span className="text-sm font-semibold">
-                    {(result.predictions.dass21_probs[index] * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="text-xs text-gray-500">
-              Total score: {result.metadata.dass21_values.reduce((a, b) => a + b, 0)}/21
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Voice Results */}
-        <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Mic className="w-5 h-5 text-teal-600" />
-              Voice Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {result.predictions.voice_probs ? (
-              <div className="space-y-2">
-                {["Low", "Medium", "High"].map((level, index) => (
-                  <div key={level} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">{level}</span>
-                    <span className="text-sm font-semibold">
-                      {(result.predictions.voice_probs[index] * 100).toFixed(1)}%
+        {/* By signal */}
+        <div className="rounded-3xl border border-ink/10 bg-card p-6 sm:p-8 lg:col-span-7">
+          <h3 className="font-display text-2xl text-ink">By signal</h3>
+          <p className="mt-1 text-sm text-muted-foreground">How each model read your data before fusion.</p>
+          <ul className="mt-6 divide-y divide-ink/10 border-t border-ink/10">
+            {modalities.map((modality) => {
+              const Icon = modality.icon
+              return (
+                <li key={modality.name} className="py-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="flex items-center gap-2.5 font-semibold text-ink">
+                      <Icon className="h-4 w-4 text-pine" aria-hidden="true" />
+                      {modality.name}
                     </span>
+                    <span className="text-right text-xs text-muted-foreground">{modality.meta}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 text-sm">
-                <Info className="w-4 h-4 mx-auto mb-1" />
-                Default distribution used
-              </div>
-            )}
-            <div className="text-xs text-gray-500">
-              {result.metadata.voice_provided ? "Voice data provided" : "Voice data not provided"}
-            </div>
-          </CardContent>
-        </Card>
+                  {modality.probs ? (
+                    <>
+                      <div className="mt-3">
+                        <ProbabilityBar probs={modality.probs} />
+                      </div>
+                      <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                        {LEVELS.map((level, index) => (
+                          <div key={level} className="flex gap-1.5">
+                            <dt className="text-muted-foreground">{level}</dt>
+                            <dd className="font-semibold tabular-nums text-ink">{pct(modality.probs?.[index])}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </>
+                  ) : (
+                    <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                      <Info className="h-4 w-4" aria-hidden="true" />
+                      Default distribution used
+                    </p>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       </div>
 
-      {/* Explanations Section */}
-      {result.explanations && (
-        <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Lightbulb className="w-6 h-6 text-yellow-600" />
-              AI Explanations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Fusion Explanation */}
-            {result.explanations.fusion.available && (
-              <div className="space-y-3">
-                <h4 className="font-semibold text-lg">Fusion Analysis</h4>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">
-                  {result.explanations.fusion.summary}
-                </p>
-                
-                {/* Modality Contributions */}
-                <div className="space-y-2">
-                  <h5 className="font-medium">Modality Contributions:</h5>
-                  <div className="grid md:grid-cols-3 gap-3">
-                    {result.explanations.fusion.modality_contributions.map((modality, index) => (
-                      <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                        <div className="font-medium text-sm capitalize">{modality.modality}</div>
-                        <div className="text-xs text-gray-600">
-                          Confidence: {(modality.confidence * 100).toFixed(1)}%
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          Contribution: {(modality.contribution_score * 100).toFixed(1)}%
-                        </div>
+      {/* Explanations */}
+      {explanations && (
+        <div className="rounded-3xl border border-ink/10 bg-card p-6 sm:p-8">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-display text-2xl text-ink">Why this result</h3>
+            <p className="eyebrow">AI explanations</p>
+          </div>
+
+          <div className="mt-6 grid gap-8 lg:grid-cols-3 lg:gap-10">
+            {fusion?.available && (
+              <div>
+                <h4 className="font-semibold text-ink">Fusion analysis</h4>
+                <p className="mt-2 leading-relaxed text-ink/75">{fusion.summary}</p>
+                <h5 className="mt-5 text-sm font-semibold text-ink">Modality contributions</h5>
+                <ul className="mt-3 space-y-3">
+                  {fusion.modality_contributions.map((modality, index) => (
+                    <li key={index}>
+                      <div className="flex justify-between text-sm">
+                        <span className="capitalize text-ink">{modality.modality}</span>
+                        <span className="tabular-nums text-muted-foreground">{pct(modality.contribution_score)}</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-pine"
+                          style={{ width: `${Math.min(100, Math.max(0, modality.contribution_score * 100))}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">Confidence: {pct(modality.confidence)}</p>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
-            {/* Physiological Explanations */}
-            {result.explanations.physiological.available && result.explanations.physiological.feature_importance.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="font-semibold text-lg">Key Physiological Factors</h4>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">
-                  {result.explanations.physiological.summary}
-                </p>
-                <div className="space-y-2">
-                  {result.explanations.physiological.feature_importance.slice(0, 5).map((feature, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <span className="text-sm text-gray-700">
-                        {formatFeatureName(feature.feature)}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">
-                          {feature.importance > 0 ? "Increases stress" : "Decreases stress"}
+            {physioFactors?.available && physioFactors.feature_importance.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-ink">Key physiological factors</h4>
+                <p className="mt-2 leading-relaxed text-ink/75">{physioFactors.summary}</p>
+                <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
+                  {physioFactors.feature_importance.slice(0, 5).map((feature, index) => {
+                    const increases = feature.importance > 0
+                    return (
+                      <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                        <span className="text-ink">{formatFeatureName(feature.feature)}</span>
+                        <span
+                          className={`inline-flex shrink-0 items-center gap-1 text-xs ${increases ? "text-clay-deep" : "text-pine"}`}
+                        >
+                          {increases ? (
+                            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <ArrowDownRight className="h-3.5 w-3.5" aria-hidden="true" />
+                          )}
+                          {increases ? "Increases stress" : "Decreases stress"}
                         </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               </div>
             )}
 
-            {/* Questionnaire Explanations */}
-            {result.explanations.questionnaire.available && result.explanations.questionnaire.feature_importance.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="font-semibold text-lg">Questionnaire Insights</h4>
-                <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">
-                  {result.explanations.questionnaire.summary}
-                </p>
-                <div className="space-y-2">
-                  {result.explanations.questionnaire.feature_importance.slice(0, 3).map((feature, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <span className="text-sm text-gray-700">
-                        {formatFeatureName(feature.feature)}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Score: {feature.value}</span>
-                      </div>
-                    </div>
+            {questionnaireFactors?.available && questionnaireFactors.feature_importance.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-ink">Questionnaire insights</h4>
+                <p className="mt-2 leading-relaxed text-ink/75">{questionnaireFactors.summary}</p>
+                <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
+                  {questionnaireFactors.feature_importance.slice(0, 3).map((feature, index) => (
+                    <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <span className="text-ink">{formatFeatureName(feature.feature)}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">Score: {feature.value}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Metadata */}
-      <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-600" />
-            Analysis Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Physiological Windows:</span>
-                <span className="font-medium">{result.metadata.physio_windows}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Features Extracted:</span>
-                <span className="font-medium">{result.metadata.physio_features}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Modalities Used:</span>
-                <span className="font-medium">{result.metadata.modalities_used.filter(Boolean).join(", ")}</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">DASS-21 Total Score:</span>
-                <span className="font-medium">{result.metadata.dass21_values.reduce((a, b) => a + b, 0)}/21</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Voice Data:</span>
-                <span className="font-medium">{result.metadata.voice_provided ? "Provided" : "Not provided"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Analysis Time:</span>
-                <span className="font-medium">{new Date().toLocaleTimeString()}</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="rounded-3xl bg-muted/60 p-6 sm:p-8">
+        <h3 className="font-semibold text-ink">Analysis details</h3>
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
+          <Detail label="Physiological windows" value={metadata.physio_windows} />
+          <Detail label="Features extracted" value={metadata.physio_features} />
+          <Detail label="Modalities used" value={metadata.modalities_used.filter(Boolean).join(", ")} />
+          <Detail label="DASS-21 total score" value={`${dassTotal}/21`} />
+          <Detail label="Voice data" value={metadata.voice_provided ? "Provided" : "Not provided"} />
+          <Detail label="Analysis time" value={new Date().toLocaleTimeString()} />
+        </dl>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        SafeSpace is a research prototype. This reading is an estimate, not a medical diagnosis.
+      </p>
     </div>
   )
 }
 
-export default Results 
+function ProbabilityBar({ probs, large = false }: { probs: number[]; large?: boolean }) {
+  return (
+    <div className={`flex w-full gap-0.5 overflow-hidden rounded-full bg-ink/10 ${large ? "h-3" : "h-2"}`} aria-hidden="true">
+      {LEVELS.map((level, index) => (
+        <div
+          key={level}
+          className={`${LEVEL_BAR[index]} h-full transition-[width] duration-700 ease-soft`}
+          style={{ width: `${Math.max(0, (probs?.[index] ?? 0) * 100)}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function Detail({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium text-ink">{value}</dd>
+    </div>
+  )
+}
+
+export default Results
