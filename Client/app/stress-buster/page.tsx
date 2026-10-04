@@ -2,223 +2,157 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Gamepad2, Brain, Zap, Star } from "lucide-react"
+import { ArrowLeft, ArrowRight } from "lucide-react"
 import DinosaurGame from "../components/DinosaurGame"
 import MemoryGame from "../components/MemoryGame"
+
+const games = {
+  dinosaur: {
+    emoji: "🦕",
+    title: "Dinosaur Jump",
+    subtitle: "Classic endless runner",
+    playIntro: "Help the dinosaur jump over obstacles and beat your high score!",
+    description:
+      "Help our friendly dinosaur jump over obstacles. Perfect for quick stress relief and sharpening your reaction time.",
+    traits: ["Reflexes", "Focus", "Fun"],
+    duration: "2–5 min",
+    panel: "bg-sage-soft",
+    accent: "bg-pine text-paper",
+  },
+  memory: {
+    emoji: "🧠",
+    title: "Memory Challenge",
+    subtitle: "Card-matching brain trainer",
+    playIntro: "Test your memory skills and improve cognitive function!",
+    description:
+      "Exercise your brain with a colourful matching game. Improve focus and memory while you unwind.",
+    traits: ["Memory", "Logic", "Calm"],
+    duration: "3–7 min",
+    panel: "bg-ochre-soft",
+    accent: "bg-ink text-paper",
+  },
+} as const
+
+type GameKey = keyof typeof games
+
+const benefits = [
+  { title: "Instant relief", text: "Quick 2–5 minute sessions give your mind a reset." },
+  { title: "Brain training", text: "Gentle practice for memory, focus and reaction time." },
+  { title: "Mood boost", text: "Light, colourful games designed to lift your spirits." },
+]
 
 export default function StressBusterPage() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null)
 
-  if (selectedGame === "dinosaur") {
+  if (selectedGame === "dinosaur" || selectedGame === "memory") {
+    const game = games[selectedGame as GameKey]
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-teal-50 pt-20">
-        <div className="container mx-auto px-4 py-8">
+      <main id="main" className="min-h-screen pb-20 pt-24 sm:pt-28">
+        <div className="mx-auto max-w-5xl px-5 sm:px-8">
           <button
+            type="button"
             onClick={() => setSelectedGame(null)}
-            className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 transition-colors mb-6 group"
+            className="group mb-8 inline-flex min-h-[44px] items-center gap-2 font-medium text-ink/70 transition-colors hover:text-ink"
           >
-            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span>Back to Games</span>
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" aria-hidden="true" />
+            Back to games
           </button>
-          
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-4">
-              🦕 Dinosaur Jump
-            </h1>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Help the dinosaur jump over obstacles and beat your high score!
-            </p>
-          </div>
-          
-          <DinosaurGame />
-        </div>
-      </div>
-    )
-  }
 
-  if (selectedGame === "memory") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 pt-20">
-        <div className="container mx-auto px-4 py-8">
-          <button
-            onClick={() => setSelectedGame(null)}
-            className="flex items-center space-x-2 text-purple-600 hover:text-purple-800 transition-colors mb-6 group"
-          >
-            <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span>Back to Games</span>
-          </button>
-          
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-4">
-              🧠 Memory Challenge
+          <div className="mb-10">
+            <h1 className="font-display text-4xl tracking-[-0.02em] text-ink sm:text-5xl">
+              <span aria-hidden="true">{game.emoji} </span>
+              {game.title}
             </h1>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Test your memory skills and improve cognitive function!
-            </p>
+            <p className="mt-3 max-w-2xl text-lg text-ink/70">{game.playIntro}</p>
           </div>
-          
-          <MemoryGame />
+
+          {selectedGame === "dinosaur" ? <DinosaurGame /> : <MemoryGame />}
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-teal-50 pt-20 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-20 h-20 bg-blue-200 rounded-full opacity-20 animate-pulse"></div>
-        <div className="absolute top-40 right-20 w-16 h-16 bg-teal-200 rounded-full opacity-30 animate-bounce"></div>
-        <div className="absolute bottom-40 left-20 w-12 h-12 bg-indigo-200 rounded-full opacity-25 animate-pulse"></div>
-        <div className="absolute bottom-20 right-10 w-24 h-24 bg-cyan-200 rounded-full opacity-20 animate-bounce"></div>
-        <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-purple-200 rounded-full opacity-10 animate-spin" style={{ animationDuration: '20s' }}></div>
-      </div>
-
-      <div className="container mx-auto px-4 py-6 relative z-10 flex flex-col justify-center min-h-[calc(100vh-5rem)]">
-        {/* Header Section */}
-        <div className="text-center mb-8">
-          <div className="mb-4">
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-teal-600 bg-clip-text text-transparent mb-4">
-              🎮 StressBuster
+    <main id="main" className="min-h-screen pb-24 pt-28 sm:pt-32">
+      <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+        <header className="grid gap-6 border-b border-ink/15 pb-12 lg:grid-cols-12 lg:pb-16">
+          <p className="eyebrow lg:col-span-4 lg:pt-4">StressBuster · mini games</p>
+          <div className="lg:col-span-8">
+            <h1 className="font-display text-[clamp(2.75rem,7vw,5.5rem)] leading-[0.95] tracking-[-0.035em] text-ink">
+              Take a <span className="italic text-pine">little</span> break.
             </h1>
-            <div className="w-40 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-teal-500 mx-auto rounded-full animate-pulse"></div>
-          </div>
-          <p className="text-lg md:text-xl text-gray-700 max-w-3xl mx-auto leading-relaxed mb-6">
-            Take a mental break with our collection of stress-relieving games. 
-            Perfect for clearing your mind and boosting your mood!
-          </p>
-          <div className="flex justify-center mb-6">
-            <Link
-              href="/check"
-              className="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white text-sm font-medium rounded-full hover:from-blue-600 hover:to-teal-600 transition-all duration-200 shadow-lg hover:shadow-xl"
-            >
-              <span>🔍</span>
-              <span>Ready to check your stress level?</span>
+            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink/70">
+              A couple of light games for clearing your head between tasks — or after a stress check.
+            </p>
+            <Link href="/check" className="btn-ghost mt-8">
+              Take the stress check
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
-          <div className="flex justify-center space-x-6 text-sm text-gray-600">
-            <span className="flex items-center bg-white/50 px-4 py-2 rounded-full backdrop-blur-sm">
-              <Zap className="w-4 h-4 text-yellow-500 mr-2" />
-              Instant Stress Relief
-            </span>
-            <span className="flex items-center bg-white/50 px-4 py-2 rounded-full backdrop-blur-sm">
-              <Brain className="w-4 h-4 text-purple-500 mr-2" />
-              Cognitive Boost
-            </span>
-            <span className="flex items-center bg-white/50 px-4 py-2 rounded-full backdrop-blur-sm">
-              <Star className="w-4 h-4 text-blue-500 mr-2" />
-              Fun & Engaging
-            </span>
-          </div>
-        </div>
-        
-        {/* Game Cards */}
-        <div className="max-w-6xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Dinosaur Game Card */}
-            <div 
-              className="group cursor-pointer transform hover:scale-105 transition-all duration-300"
-              onClick={() => setSelectedGame("dinosaur")}
-            >
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden hover:shadow-2xl transition-all duration-300">
-                <div className="bg-gradient-to-br from-green-400 to-emerald-600 p-8 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
-                  
-                  <div className="relative z-10">
-                    <div className="text-6xl mb-4 group-hover:animate-bounce">🦕</div>
-                    <h3 className="text-2xl font-bold mb-2">Dinosaur Jump</h3>
-                    <p className="text-green-100 text-sm">Classic endless runner game</p>
-                  </div>
-                </div>
-                
-                <div className="p-6">
-                  <p className="text-gray-600 mb-4 leading-relaxed">
-                    Help our friendly dinosaur jump over obstacles in this classic endless runner. 
-                    Perfect for quick stress relief and improving reaction time.
-                  </p>
-                  
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex space-x-4 text-xs text-gray-500">
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-                        Reflexes
-                      </span>
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
-                        Focus
-                      </span>
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full mr-1"></div>
-                        Fun
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-400">2-5 min</div>
-                  </div>
-                  
-                  <div className="flex justify-end">
-                    <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium group-hover:from-green-600 group-hover:to-emerald-700 transition-all duration-200 flex items-center space-x-2">
-                      <Gamepad2 size={16} />
-                      <span>Play Now</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        </header>
 
-            {/* Memory Game Card */}
-            <div 
-              className="group cursor-pointer transform hover:scale-105 transition-all duration-300"
-              onClick={() => setSelectedGame("memory")}
-            >
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden hover:shadow-2xl transition-all duration-300">
-                <div className="bg-gradient-to-br from-purple-400 to-pink-600 p-8 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
-                  
-                  <div className="relative z-10">
-                    <div className="text-6xl mb-4 group-hover:animate-pulse">🧠</div>
-                    <h3 className="text-2xl font-bold mb-2">Memory Challenge</h3>
-                    <p className="text-purple-100 text-sm">Card matching brain trainer</p>
-                  </div>
+        <div className="mt-12 grid gap-6 lg:grid-cols-12">
+          {(Object.keys(games) as GameKey[]).map((key, i) => {
+            const game = games[key]
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSelectedGame(key)}
+                className={`group relative flex flex-col overflow-hidden rounded-[2rem] p-6 text-left transition-transform duration-500 ease-soft motion-safe:hover:-translate-y-1 sm:p-10 ${game.panel} ${
+                  i === 0 ? "lg:col-span-7" : "lg:col-span-5"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink/60">{game.subtitle}</span>
+                  <span className="font-mono text-xs text-ink/60">{game.duration}</span>
                 </div>
-                
-                <div className="p-6">
-                  <p className="text-gray-600 mb-4 leading-relaxed">
-                    Exercise your brain with this colorful memory matching game. 
-                    Improve cognitive function while having fun and reducing stress.
-                  </p>
-                  
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex space-x-4 text-xs text-gray-500">
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
-                        Memory
-                      </span>
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-pink-500 rounded-full mr-1"></div>
-                        Logic
-                      </span>
-                      <span className="flex items-center">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full mr-1"></div>
-                        Calm
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-400">3-7 min</div>
-                  </div>
-                  
-                  <div className="flex justify-end">
-                    <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium group-hover:from-purple-600 group-hover:to-pink-700 transition-all duration-200 flex items-center space-x-2">
-                      <Brain size={16} />
-                      <span>Play Now</span>
-                    </div>
-                  </div>
+                <span
+                  className="mt-10 block text-6xl transition-transform duration-500 ease-soft motion-safe:group-hover:-rotate-6 motion-safe:group-hover:scale-110 sm:text-7xl"
+                  aria-hidden="true"
+                >
+                  {game.emoji}
+                </span>
+                <h2 className="mt-6 font-display text-3xl tracking-[-0.02em] text-ink sm:text-4xl">{game.title}</h2>
+                <p className="mt-3 max-w-md leading-relaxed text-ink/75">{game.description}</p>
+                <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+                  <ul className="flex flex-wrap gap-2">
+                    {game.traits.map((trait) => (
+                      <li key={trait} className="rounded-full border border-ink/15 px-3 py-1 text-xs text-ink/70">
+                        {trait}
+                      </li>
+                    ))}
+                  </ul>
+                  <span className={`btn !min-h-[40px] !py-2 text-sm ${game.accent}`}>
+                    Play now
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                  </span>
                 </div>
-              </div>
-            </div>
-          </div>
+              </button>
+            )
+          })}
         </div>
+
+        <section aria-labelledby="why-heading" className="mt-20 grid gap-8 lg:grid-cols-12">
+          <h2 id="why-heading" className="font-display text-3xl tracking-[-0.02em] text-ink lg:col-span-4">
+            Why play?
+          </h2>
+          <ul className="grid gap-8 sm:grid-cols-3 lg:col-span-8">
+            {benefits.map((benefit, i) => (
+              <li key={benefit.title} className="border-t border-ink/15 pt-5">
+                <span className="font-mono text-xs text-muted-foreground">0{i + 1}</span>
+                <h3 className="mt-2 font-semibold text-ink">{benefit.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{benefit.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <p className="mt-12 max-w-2xl text-xs text-muted-foreground">
+          Research shows that short gaming breaks can reduce cortisol levels, improve mood, and enhance productivity when
+          returning to work tasks.
+        </p>
       </div>
-    </div>
+    </main>
   )
 }

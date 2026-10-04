@@ -10,7 +10,32 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  			display: ['var(--font-display)', 'ui-serif', 'Georgia', 'serif'],
+  			mono: ['var(--font-mono)', 'ui-monospace', 'monospace']
+  		},
   		colors: {
+  			paper: '#F6F1E8',
+  			ink: '#17231F',
+  			pine: {
+  				DEFAULT: '#2C5A4B',
+  				deep: '#1E3F35'
+  			},
+  			sage: {
+  				DEFAULT: '#A9C2A4',
+  				soft: '#E3EADF'
+  			},
+  			clay: {
+  				DEFAULT: '#D9774B',
+  				deep: '#9A4325',
+  				soft: '#F6DCCF'
+  			},
+  			ochre: {
+  				DEFAULT: '#D9A63E',
+  				deep: '#7A5A14',
+  				soft: '#F5E6C4'
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -84,6 +109,9 @@ const config: Config = {
   					height: '0'
   				}
   			}
+  		},
+  		transitionTimingFunction: {
+  			soft: 'cubic-bezier(0.22, 1, 0.36, 1)'
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
