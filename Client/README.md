@@ -13,7 +13,7 @@ pnpm run dev
 
 If pnpm is not installed, install the pinned version once with `npm install --global pnpm@10.10.0`.
 
-Open the assessment at [http://localhost:3000/check](http://localhost:3000/check). The frontend sends prediction requests to the backend at `http://localhost:8000/predict`.
+Open the assessment at [http://localhost:3000/check](http://localhost:3000/check). The frontend sends prediction requests to `http://localhost:8000/predict` by default. To use another backend, set `NEXT_PUBLIC_API_URL` (for example `NEXT_PUBLIC_API_URL=https://api.example.com` in `.env.local`) before `pnpm run dev` or `pnpm run build`.
 
 ## Production build check
 

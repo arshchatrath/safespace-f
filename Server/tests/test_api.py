@@ -132,3 +132,21 @@ def test_health(client):
     assert body["status"] == "ok"
     assert body["voice_input_shape"] == [228, 40, 1]
     assert body["physiological_features"] == 180
+
+
+def test_predict_does_not_block_the_event_loop():
+    # A sync endpoint runs in FastAPI's thread pool; an async one would block /health for ~2 s.
+    import inspect
+
+    import main
+
+    assert not inspect.iscoroutinefunction(main.predict)
+
+
+def test_oversized_upload_rejected(client, sample_csv_bytes, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "MAX_AUDIO_BYTES", 1024)
+    response = post(client, sample_csv_bytes, audio=b"\0" * 2048)
+    assert response.status_code == 413
+    assert "larger than" in response.json()["message"]

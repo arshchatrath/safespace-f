@@ -32,9 +32,18 @@ DASS21_MAX_SCORE = 3
 VOICE_SAMPLE_RATE = 22050
 N_MFCC = 40
 MFCC_FRAMES = 228  # fixed time dimension of the voice model input
+MFCC_HOP_LENGTH = 512  # librosa.feature.mfcc default
+ANALYSED_SAMPLES = MFCC_FRAMES * MFCC_HOP_LENGTH  # audio the model sees: 116,736 samples = 5.3 s
 MIN_AUDIO_SECONDS = 1.0  # shorter clips are zero-padded to this length
+MAX_AUDIO_DECODE_SECONDS = 60  # only the first 5.3 s are analysed; cap decoding of long uploads
 SILENCE_RMS_THRESHOLD = 1e-4
+# Reject recordings whose analysed part is >20 dB quieter than the rest (speech starts too late).
+QUIET_START_RATIO = 0.1
 AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm")
+
+# --- Upload limits ---------------------------------------------------------
+MAX_CSV_BYTES = 50 * 1024 * 1024    # ~2 days of 4-channel 100 Hz data
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 # --- Saved artifacts --------------------------------------------------------
 PHYSIOLOGICAL_MODEL_PATH = MODELS_DIR / "regularized_global_model.pkl"

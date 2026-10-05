@@ -60,13 +60,15 @@ pnpm run dev
 
 Open <http://localhost:3000/check>. API docs: <http://localhost:8000/docs>; model status:
 <http://localhost:8000/health>. To restrict which sites may call the API, set
-`SAFESPACE_CORS_ORIGINS` (comma-separated) before starting the backend.
+`SAFESPACE_CORS_ORIGINS` (comma-separated) before starting the backend. If the backend is not on
+`http://localhost:8000`, set `NEXT_PUBLIC_API_URL` for the frontend (e.g. in `Client/.env.local`)
+before building it.
 
 ## Try a prediction
 
 1. Upload `sample_physiological_data.csv`.
-2. Answer the seven statements (at least one above 0).
-3. Record a few sentences or upload an audio file. Only the first ~5.3 s are analysed.
+2. Answer all seven statements.
+3. Record a few sentences or upload an audio file. Start speaking straight away: only the first ~5.3 s are analysed.
 4. Press **Analyze stress level**.
 
 `POST /predict` requires all three form fields: `physiological_file` (CSV with `ECG`, `EDA`,

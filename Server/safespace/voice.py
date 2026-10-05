@@ -14,12 +14,17 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer
 
 from .config import (
-    AUDIO_EXTENSIONS, MFCC_FRAMES, MIN_AUDIO_SECONDS, N_MFCC, SILENCE_RMS_THRESHOLD, VOICE_SAMPLE_RATE,
+    ANALYSED_SAMPLES,
+    AUDIO_EXTENSIONS,
+    MAX_AUDIO_DECODE_SECONDS,
+    MFCC_FRAMES,
+    MFCC_HOP_LENGTH,
+    MIN_AUDIO_SECONDS,
+    N_MFCC,
+    QUIET_START_RATIO,
+    SILENCE_RMS_THRESHOLD,
+    VOICE_SAMPLE_RATE,
 )
-
-# librosa.feature.mfcc default hop length; used to convert frames to seconds.
-MFCC_HOP_LENGTH = 512
-
 
 class VoiceInputError(ValueError):
     """The uploaded audio cannot be analysed."""
@@ -48,9 +53,10 @@ class Attention(Layer):
 
 
 def load_audio(audio_bytes, filename):
-    """Decode an uploaded file and resample it to 22,050 Hz.
+    """Decode an uploaded file (first 60 s at most) and resample it to 22,050 Hz.
 
-    Returns (waveform, sample_rate, original_sample_rate).
+    Returns (waveform, sample_rate, original_sample_rate). Rejects recordings whose
+    analysed part (the first 5.3 s) is silent, since the model would score silence.
     """
     extension = os.path.splitext(filename or "")[1].lower()
     if extension not in AUDIO_EXTENSIONS:
@@ -69,7 +75,7 @@ def load_audio(audio_bytes, filename):
     except Exception:  # soundfile cannot read WebM/M4A headers; only used for reporting
         original_rate = None
     try:
-        waveform, sample_rate = librosa.load(path, sr=VOICE_SAMPLE_RATE)
+        waveform, sample_rate = librosa.load(path, sr=VOICE_SAMPLE_RATE, duration=MAX_AUDIO_DECODE_SECONDS)
     except Exception as exc:  # soundfile/audioread raise many unrelated exception types
         raise VoiceInputError(
             f"Could not decode the voice recording ({type(exc).__name__}). "
@@ -82,9 +88,29 @@ def load_audio(audio_bytes, filename):
         raise VoiceInputError("The voice recording contains no audio samples.")
     if not np.all(np.isfinite(waveform)):
         raise VoiceInputError("The voice recording contains invalid samples.")
-    if float(np.sqrt(np.mean(waveform ** 2))) < SILENCE_RMS_THRESHOLD:
-        raise VoiceInputError("The voice recording is silent. Please record again closer to the microphone.")
+    _check_speech_in_analysed_part(waveform)
     return waveform, sample_rate, original_rate
+
+
+def _rms(x):
+    return float(np.sqrt(np.mean(np.square(x)))) if len(x) else 0.0
+
+
+def _check_speech_in_analysed_part(waveform):
+    analysed, rest = waveform[:ANALYSED_SAMPLES], waveform[ANALYSED_SAMPLES:]
+    if _rms(waveform) < SILENCE_RMS_THRESHOLD:
+        raise VoiceInputError("The voice recording is silent. Please record again closer to the microphone.")
+    seconds = ANALYSED_SAMPLES / VOICE_SAMPLE_RATE
+    if _rms(analysed) < SILENCE_RMS_THRESHOLD:
+        raise VoiceInputError(
+            f"The first {seconds:.1f} s of the recording are silent, and only that part is analysed. "
+            "Start speaking right after you press record, or trim the silence from the file."
+        )
+    if len(rest) >= VOICE_SAMPLE_RATE // 2 and _rms(analysed) < QUIET_START_RATIO * _rms(rest):
+        raise VoiceInputError(
+            f"The first {seconds:.1f} s of the recording are much quieter than the rest, and only that part "
+            "is analysed. Start speaking right after you press record, or trim the silence from the file."
+        )
 
 
 def mfcc_features(waveform, sample_rate):

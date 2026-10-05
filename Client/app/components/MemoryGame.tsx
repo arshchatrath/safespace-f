@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { RotateCcw, Trophy, Clock, Star } from "lucide-react"
 
 interface Card {
@@ -22,6 +22,16 @@ const CARD_EMOJIS = [
   "🌈", "🦋", "🌸", "🍀", "🌺", "🎀", "💎", "🔮"
 ]
 
+// Fisher-Yates shuffle; sort(() => Math.random() - 0.5) is biased.
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 export default function MemoryGame() {
   const [cards, setCards] = useState<Card[]>([])
   const [flippedCards, setFlippedCards] = useState<number[]>([])
@@ -33,6 +43,17 @@ export default function MemoryGame() {
   })
   const [gameStarted, setGameStarted] = useState(false)
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium')
+  // Pending "flip back or mark matched" step; cleared on new game/unmount so it can't hit the next game's cards.
+  const pairCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const cancelPairCheck = () => {
+    if (pairCheckRef.current) {
+      clearTimeout(pairCheckRef.current)
+      pairCheckRef.current = null
+    }
+  }
+
+  useEffect(() => cancelPairCheck, [])
 
   const getDifficultySettings = (level: 'easy' | 'medium' | 'hard') => {
     switch (level) {
@@ -45,8 +66,8 @@ export default function MemoryGame() {
   const initializeGame = useCallback(() => {
     const { pairs } = getDifficultySettings(difficulty)
     const selectedEmojis = CARD_EMOJIS.slice(0, pairs)
-    const gameCards = [...selectedEmojis, ...selectedEmojis]
-      .sort(() => Math.random() - 0.5)
+    cancelPairCheck()
+    const gameCards = shuffle([...selectedEmojis, ...selectedEmojis])
       .map((emoji, index) => ({
         id: index,
         emoji,
@@ -69,43 +90,33 @@ export default function MemoryGame() {
     if (flippedCards.length === 2 || flippedCards.includes(cardId)) return
     
     const card = cards.find(c => c.id === cardId)
-    if (card?.isMatched) return
+    if (!card || card.isMatched) return
 
-    setFlippedCards(prev => [...prev, cardId])
-    setCards(prev => prev.map(card => 
-      card.id === cardId ? { ...card, isFlipped: true } : card
+    const flipped = [...flippedCards, cardId]
+    setFlippedCards(flipped)
+    setCards(prev => prev.map(c => 
+      c.id === cardId ? { ...c, isFlipped: true } : c
     ))
-  }, [cards, flippedCards])
 
-  useEffect(() => {
-    if (flippedCards.length === 2) {
-      const [first, second] = flippedCards
-      const firstCard = cards.find(c => c.id === first)
-      const secondCard = cards.find(c => c.id === second)
-
+    if (flipped.length === 2) {
+      const [first, second] = flipped
+      const isMatch = cards.find(c => c.id === first)?.emoji === card.emoji
       setGameStats(prev => ({ ...prev, moves: prev.moves + 1 }))
 
-      setTimeout(() => {
-        if (firstCard?.emoji === secondCard?.emoji) {
-          // Match found
-          setCards(prev => prev.map(card => 
-            card.id === first || card.id === second 
-              ? { ...card, isMatched: true }
-              : card
-          ))
+      pairCheckRef.current = setTimeout(() => {
+        pairCheckRef.current = null
+        setCards(prev => prev.map(c =>
+          c.id === first || c.id === second
+            ? isMatch ? { ...c, isMatched: true } : { ...c, isFlipped: false }
+            : c
+        ))
+        if (isMatch) {
           setGameStats(prev => ({ ...prev, matches: prev.matches + 1 }))
-        } else {
-          // No match - flip back
-          setCards(prev => prev.map(card => 
-            card.id === first || card.id === second 
-              ? { ...card, isFlipped: false }
-              : card
-          ))
         }
         setFlippedCards([])
       }, 1000)
     }
-  }, [flippedCards, cards])
+  }, [cards, flippedCards])
 
   useEffect(() => {
     const { pairs } = getDifficultySettings(difficulty)
@@ -222,10 +233,13 @@ export default function MemoryGame() {
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6 mb-6">
         <div className={`grid ${gridCols} gap-4 max-w-2xl mx-auto`}>
           {cards.map((card) => (
-            <div
+            <button
+              type="button"
               key={card.id}
               onClick={() => handleCardClick(card.id)}
-              className={`aspect-square rounded-xl cursor-pointer transition-all duration-300 transform hover:scale-105 ${
+              disabled={card.isMatched}
+              aria-label={card.isFlipped || card.isMatched ? `Card ${card.emoji}${card.isMatched ? ", matched" : ""}` : "Hidden card"}
+              className={`aspect-square rounded-xl cursor-pointer disabled:cursor-default transition-all duration-300 transform hover:scale-105 ${
                 card.isFlipped || card.isMatched
                   ? 'bg-gradient-to-br from-purple-400 to-pink-500 text-white shadow-lg'
                   : 'bg-gradient-to-br from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 shadow-md'
@@ -238,7 +252,7 @@ export default function MemoryGame() {
                   <span className="text-gray-400">?</span>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -253,7 +267,10 @@ export default function MemoryGame() {
           <span>New Game</span>
         </button>
         <button
-          onClick={() => setGameStarted(false)}
+          onClick={() => {
+            cancelPairCheck()
+            setGameStarted(false)
+          }}
           className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg"
         >
           Change Difficulty

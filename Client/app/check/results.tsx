@@ -81,6 +81,7 @@ interface StressResult {
 interface ResultsProps {
   result: StressResult | null
   isLoading: boolean
+  analyzedAt?: Date | null
 }
 
 const LEVELS = ["Low", "Medium", "High"] as const
@@ -187,7 +188,7 @@ const formatVoiceFeatureName = (feature: string) => {
   return level ? `${level} stress score` : "Voice score"
 }
 
-const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
+const Results: React.FC<ResultsProps> = ({ result, isLoading, analyzedAt }) => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center rounded-3xl border border-ink/10 bg-card px-6 py-16 text-center">
@@ -435,7 +436,7 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
             label="Voice analysed"
             value={metadata.voice_seconds_analysed ? `${metadata.voice_seconds_analysed.toFixed(1)} s` : "Provided"}
           />
-          <Detail label="Analysis time" value={new Date().toLocaleTimeString()} />
+          <Detail label="Analysis time" value={analyzedAt ? analyzedAt.toLocaleTimeString() : "—"} />
         </dl>
       </div>
 

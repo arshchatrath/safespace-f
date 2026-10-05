@@ -61,7 +61,7 @@ safespace-f/
     │   ├── explanations.py        SHAP, attention and fusion-weight explanations
     │   └── artifacts.py           loads all models once at startup
     ├── models/                    saved artifacts (see table below)
-    ├── tests/                     pytest suite (63 tests) + synthetic speech fixture
+    ├── tests/                     pytest suite (69 tests) + synthetic speech fixture
     ├── requirements.txt           pinned runtime dependencies
     └── requirements-dev.txt       + pytest, httpx
 ```
@@ -122,21 +122,27 @@ readable message; it never replaces a modality with a default probability vector
 
 | Field | Type | Rules |
 |---|---|---|
-| `physiological_file` | file | `.csv`, UTF-8, columns `ECG`, `EDA`, `EMG`, `Temp` (case-insensitive, extra columns ignored), numeric and non-empty, **sampled at 100 Hz**, ≥ 1,000 rows |
+| `physiological_file` | file | `.csv`, ≤ 50 MB, UTF-8, columns `ECG`, `EDA`, `EMG`, `Temp` (case-insensitive, extra columns ignored), numeric and non-empty, **sampled at 100 Hz**, ≥ 1,000 rows |
 | `dass21_responses` | text | exactly 7 numbers in 0–3, as `1,2,0,3,1,2,0` or `[1,2,0,3,1,2,0]` |
-| `voice_audio` | file | `.wav .mp3 .m4a .flac .ogg .webm`; not empty, decodable, not silent. WebM/M4A/MP3 decoding needs `ffmpeg` on the server |
+| `voice_audio` | file | `.wav .mp3 .m4a .flac .ogg .webm`, ≤ 25 MB; not empty, decodable, and speech must start within the first 5.3 s (the part the model analyses). WebM/M4A/MP3 decoding needs `ffmpeg` on the server |
 
 Responses:
 
 * **200** — `predictions` (`physio_probs`, `dass21_probs`, `voice_probs`, `fusion_probs`,
   `fusion_pred`, `prediction_label`, `confidence`), `explanations` (`physiological`,
   `questionnaire`, `voice`, `fusion`) and `metadata` (window count, feature count, answers,
-  voice duration, original and analysed sample rates, seconds of audio analysed).
+  decoded voice duration (up to 60 s), original and analysed sample rates, seconds of audio analysed).
 * **422** — `{"success": false, "error": "Validation Error", "message": "...", "error_type": "validation"}`.
   A missing form field returns FastAPI's standard 422 body.
+* **413** — an upload over its size limit, same shape.
 * **500** — unexpected server error, same shape with `error_type: "server"`.
 
 `confidence` is the largest fused probability. It is not a measured accuracy.
+
+`/predict` is a synchronous endpoint, so FastAPI runs it in a worker thread and the server keeps
+answering other requests (e.g. `/health`) during the ~2 s of model work. Model calls are
+serialised by a lock because the shap `KernelExplainer` keeps per-call state on its instance;
+concurrent predictions therefore queue rather than run in parallel.
 
 `GET /health` returns the loaded model types, the voice input shape and the physiological
 feature count.
@@ -268,8 +274,9 @@ decoding or feature failure returns HTTP 422.
 | Stage | Code | What happens |
 |---|---|---|
 | Ingestion | `main.predict` | Read uploaded bytes; the browser records `recorded_audio.webm` (Opus) |
-| Validation | `voice.load_audio` | Allowed extension; non-empty; decodes (librosa → soundfile, or ffmpeg via audioread); finite samples; RMS ≥ 1e-4 (not silent) |
+| Decoding | `voice.load_audio` | Allowed extension; non-empty; decodes (librosa → soundfile, or ffmpeg via audioread) at most the first 60 s; finite samples |
 | Resampling | `voice.load_audio` | Every upload is resampled to **22,050 Hz** |
+| Speech check | `voice.load_audio` | Rejects a recording that is silent (RMS < 1e-4), whose first 5.3 s are silent, or whose first 5.3 s are more than 20 dB quieter than the rest (speech starts too late). Without this, the model scored the silent lead-in: 6 s of silence before speech came back as Low 0.69 |
 | Features | `voice.mfcc_features` | Pad clips shorter than 1 s; 40 MFCCs per frame (librosa defaults: 2,048-sample FFT, 512-sample hop); pad or truncate to **228 frames ≈ 5.3 s**; shape (1, 228, 40, 1) |
 | Inference | `voice.predict` | Keras `predict` → softmax `P(Low, Medium, High)` |
 
@@ -403,10 +410,13 @@ used random "dummy" background data.
 ## 9. Frontend flow
 
 `Client/app/check/page.tsx` collects the three inputs. Analysis is enabled only when a CSV is
-uploaded, at least one answer is above 0, and a recording or audio file exists. The recorder
-uses `MediaRecorder` (`audio/webm;codecs=opus`) and lets the user play back or discard the clip.
-The page posts `physiological_file`, `dass21_responses` (comma list) and `voice_audio` to
-`http://localhost:8000/predict`; on a 422 it shows the API's `message`.
+uploaded, all seven statements are answered (0 "Never" is a valid answer; nothing is
+pre-selected), and a recording or audio file exists. The recorder uses `MediaRecorder` with the
+first format the browser supports — WebM/Opus in Chrome, Edge and Firefox, MP4/AAC (sent as
+`.m4a`) in Safari — and lets the user play back or discard the clip; leaving the page releases the
+microphone. The page posts `physiological_file`, `dass21_responses` (comma list) and
+`voice_audio` to `${NEXT_PUBLIC_API_URL}/predict` (default `http://localhost:8000`); on a 422 or
+413 it shows the API's `message`.
 `Client/app/check/results.tsx` renders the fused and per-model probabilities, the fusion shares,
 SHAP directions, questionnaire statements and voice attention.
 
@@ -417,16 +427,16 @@ SHAP directions, questionnaire statements and voice attention.
 ```bash
 cd Server
 python -m pip install -r requirements-dev.txt
-python -m pytest            # 63 tests, ~15-40 s, loads the real models
+python -m pytest            # 69 tests, ~15-40 s, loads the real models
 ```
 
 | File | Covers |
 |---|---|
 | `test_physiological.py` | feature layout = 180 and matches the model; windowing; bit-identical output vs. the pre-refactor API; validation errors; constant signals; heart-rate feature on a synthetic ECG |
 | `test_questionnaire.py` | input formats and rejections; item order; bit-identical output vs. pre-refactor; 0s → Low, 3s → High; model structure |
-| `test_voice.py` | model shapes; decoding and resampling; truncation; output differs from the zero-input output; sample-rate invariance (16 kHz vs. 48 kHz); attention sums to 1; empty, corrupt, wrong-format and silent audio rejected; browser WebM decoding (skipped without ffmpeg) |
+| `test_voice.py` | model shapes; decoding and resampling; truncation; output differs from the zero-input output; sample-rate invariance (16 kHz vs. 48 kHz); attention sums to 1; empty, corrupt, wrong-format and silent audio rejected; late speech start rejected, short pause accepted; 60 s decode cap; browser WebM decoding (skipped without ffmpeg) |
 | `test_fusion.py` | formula, weights, required modalities, malformed inputs, saved artifact parity |
-| `test_api.py` | full `/predict` with all three models; response contract used by the frontend; fusion recomputed from the response; all explanations available; SHAP additivity; voice required; bad inputs → 422; `/health` |
+| `test_api.py` | full `/predict` with all three models; response contract used by the frontend; fusion recomputed from the response; all explanations available; SHAP additivity; voice required; bad inputs → 422; oversized upload → 413; endpoint runs off the event loop; `/health` |
 
 These are software tests. The CSV and speech fixtures are synthetic; no test measures how
 accurately SafeSpace detects stress in real people.

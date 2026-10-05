@@ -43,10 +43,14 @@ export default function DinosaurGame() {
   const GAME_SPEED = 3
   const OBSTACLE_WIDTH = 15
   const OBSTACLE_HEIGHT = 30
+  // The dino is drawn at 1.5x with legs and feet below the body; its feet must rest on the ground.
+  const DINO_SCALE = 1.5
+  const LEG_HEIGHT = 11
+  const DINO_GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT * DINO_SCALE - LEG_HEIGHT
 
   // Game state refs
   const dinoRef = useRef<DinoState>({
-    y: CANVAS_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT,
+    y: DINO_GROUND_Y,
     velocity: 0,
     isJumping: false
   })
@@ -72,7 +76,7 @@ export default function DinosaurGame() {
 
   const startGame = useCallback(() => {
     dinoRef.current = {
-      y: CANVAS_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT,
+      y: DINO_GROUND_Y,
       velocity: 0,
       isJumping: false
     }
@@ -104,14 +108,13 @@ export default function DinosaurGame() {
   }, [])
 
   const checkCollision = useCallback((dino: DinoState, obstacle: Obstacle): boolean => {
-    const dinoScale = 1.5
-    const scaledWidth = DINO_WIDTH * dinoScale
-    const scaledHeight = DINO_HEIGHT * dinoScale
+    const scaledWidth = DINO_WIDTH * DINO_SCALE
+    const scaledHeight = DINO_HEIGHT * DINO_SCALE
     
     const dinoLeft = 50 + 5 // Add small margin for better gameplay
     const dinoRight = dinoLeft + scaledWidth - 10 // Reduce hitbox slightly
     const dinoTop = dino.y + 5
-    const dinoBottom = dino.y + scaledHeight - 5
+    const dinoBottom = dino.y + scaledHeight + LEG_HEIGHT - 3 // feet
 
     const obstacleLeft = obstacle.x + 2
     const obstacleRight = obstacle.x + obstacle.width - 2
@@ -180,18 +183,16 @@ export default function DinosaurGame() {
     dino.y += dino.velocity
 
     // Ground collision
-    const groundY = CANVAS_HEIGHT - GROUND_HEIGHT - DINO_HEIGHT
-    if (dino.y >= groundY) {
-      dino.y = groundY
+    if (dino.y >= DINO_GROUND_Y) {
+      dino.y = DINO_GROUND_Y
       dino.velocity = 0
       dino.isJumping = false
     }
 
     // Draw enhanced and appealing dino with detailed animation
     const dinoX = 50
-    const dinoScale = 1.5 // Make dino bigger
-    const scaledWidth = DINO_WIDTH * dinoScale
-    const scaledHeight = DINO_HEIGHT * dinoScale
+    const scaledWidth = DINO_WIDTH * DINO_SCALE
+    const scaledHeight = DINO_HEIGHT * DINO_SCALE
     
     ctx.save()
     
@@ -442,6 +443,9 @@ export default function DinosaurGame() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Let Space keep activating focused buttons and links (e.g. "Back to games").
+      const target = e.target as HTMLElement | null
+      if (target?.closest('button, a, input, select, textarea, [contenteditable="true"]')) return
       if (e.code === 'Space') {
         e.preventDefault()
         if (gameState.isGameOver || !gameState.isRunning) {

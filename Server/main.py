@@ -11,6 +11,7 @@ Run from the Server directory:  uvicorn main:app --host 127.0.0.1 --port 8000
 
 import logging
 import os
+import threading
 
 import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile
@@ -19,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from safespace import physiological, questionnaire, voice
 from safespace.artifacts import load_models
-from safespace.config import CLASS_NAMES, MFCC_FRAMES, SENSORS
+from safespace.config import CLASS_NAMES, MAX_AUDIO_BYTES, MAX_CSV_BYTES, MFCC_FRAMES, SENSORS
 from safespace.fusion import FusionInputError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -43,6 +44,22 @@ app.add_middleware(
 
 # Fail at startup if any model artifact is missing or cannot be loaded.
 models = load_models()
+
+# /predict is a sync endpoint, so FastAPI runs it in a worker thread and the event loop stays
+# free for other requests. The shap KernelExplainer keeps per-call state on the instance, so
+# model work is serialised with this lock.
+_inference_lock = threading.Lock()
+
+
+class UploadTooLargeError(ValueError):
+    pass
+
+
+def _read_limited(upload, limit, label):
+    data = upload.file.read(limit + 1)
+    if len(data) > limit:
+        raise UploadTooLargeError(f"The {label} is larger than {limit // (1024 * 1024)} MB.")
+    return data
 
 
 def _error(status, title, message, kind):
@@ -69,16 +86,29 @@ def health():
 
 
 @app.post("/predict")
-async def predict(
+def predict(
     physiological_file: UploadFile = File(..., description="CSV with ECG, EDA, EMG, Temp columns at 100 Hz"),
     dass21_responses: str = Form(..., description="Seven DASS-21 stress-item answers (0-3), comma-separated or JSON"),
     voice_audio: UploadFile = File(..., description="Voice recording (WAV, MP3, M4A, FLAC, OGG or WebM)"),
 ):
     try:
-        # 1. Physiological: CSV -> windows -> 180 features -> averaged window probabilities
         if not (physiological_file.filename or "").lower().endswith(".csv"):
             raise physiological.PhysiologicalInputError("Physiological file must be a .csv file")
-        signals = physiological.read_signals(await physiological_file.read())
+        csv_bytes = _read_limited(physiological_file, MAX_CSV_BYTES, "physiological file")
+        audio_bytes = _read_limited(voice_audio, MAX_AUDIO_BYTES, "voice recording")
+    except UploadTooLargeError as exc:
+        return _error(413, "Payload Too Large", str(exc), "validation")
+    except physiological.PhysiologicalInputError as exc:
+        return _error(422, "Validation Error", str(exc), "validation")
+
+    with _inference_lock:
+        return _run_pipeline(csv_bytes, dass21_responses, audio_bytes, voice_audio.filename)
+
+
+def _run_pipeline(csv_bytes, dass21_responses, audio_bytes, audio_filename):
+    try:
+        # 1. Physiological: CSV -> windows -> 180 features -> averaged window probabilities
+        signals = physiological.read_signals(csv_bytes)
         physio_features = physiological.window_features(signals)
         physio_probs, _ = physiological.predict(models.physiological, physio_features)
 
@@ -87,7 +117,7 @@ async def predict(
         dass21_probs = questionnaire.predict(models.questionnaire, models.questionnaire_scaler, answers)
 
         # 3. Voice: audio -> MFCC (228 x 40) -> CNN-BiGRU-Attention model
-        waveform, sample_rate, original_rate = voice.load_audio(await voice_audio.read(), voice_audio.filename)
+        waveform, sample_rate, original_rate = voice.load_audio(audio_bytes, audio_filename)
         voice_input, frames_used = voice.mfcc_features(waveform, sample_rate)
         voice_probs = voice.predict(models.voice, voice_input)
 
@@ -128,7 +158,7 @@ async def predict(
             "physio_rows": int(len(signals)),
             "dass21_values": answers,
             "voice_provided": True,
-            "voice_filename": voice_audio.filename,
+            "voice_filename": audio_filename,
             "voice_duration_sec": round(len(waveform) / sample_rate, 3),
             "voice_original_sample_rate": original_rate,
             "voice_sample_rate": int(sample_rate),
