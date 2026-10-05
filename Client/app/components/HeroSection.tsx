@@ -12,7 +12,7 @@ interface HeroSectionProps {
 const facts = [
   { value: "3", label: "signals read together" },
   { value: "7", label: "short questions" },
-  { value: "SHAP + LIME", label: "explanations you can read" },
+  { value: "SHAP", label: "explanations with every result" },
 ]
 
 export default function HeroSection({ onLearnMore }: HeroSectionProps) {

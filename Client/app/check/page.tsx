@@ -25,7 +25,14 @@ const SCALE = [
   { value: 3, label: "Almost always" },
 ]
 
-const PHYSIO_EXTENSIONS = [".csv", ".json"]
+const PHYSIO_EXTENSIONS = [".csv"]
+const API_URL = "http://localhost:8000/predict"
+
+class ApiError extends Error {
+  constructor(public status: number, public detail?: string) {
+    super(`HTTP ${status}`)
+  }
+}
 
 export default function CheckPage() {
   const [deviceConnected, setDeviceConnected] = useState(false)
@@ -98,7 +105,7 @@ export default function CheckPage() {
     const file = event.dataTransfer.files?.[0]
     if (!file) return
     if (!PHYSIO_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
-      setDropError("That file type isn't supported. Please use a .csv or .json file.")
+      setDropError("That file type isn't supported. Please use a .csv file.")
       return
     }
     setDropError(null)
@@ -197,53 +204,29 @@ export default function CheckPage() {
     setIsLoading(true);
     setError(null);
     try {
-      // Convert DASS-21 integer responses to a comma-separated string
-      const dass21ResponseString = dass21Responses.join(",");
-
+      // Field names and formats must match Server/main.py POST /predict.
       const formData = new FormData();
       formData.append("physiological_file", uploadedFile);
-      formData.append("dass21_responses", dass21ResponseString);
-
+      formData.append("dass21_responses", dass21Responses.join(","));
       formData.append("voice_audio", audioFile, audioFile.name);
-      console.log("✅ Voice audio file details:", {
-        name: audioFile.name,
-        type: audioFile.type,
-        size: audioFile.size,
-        lastModified: audioFile.lastModified
-      });
 
-      // Debug prints
-      console.log("✅ Sending physiological_file:", uploadedFile.name);
-      console.log("✅ DASS-21 Responses:", dass21ResponseString);
-      console.log("✅ Voice audio file:", audioFile.name);
-
-      // Debug: Log FormData contents
-      console.log("📋 FormData contents:");
-      for (let [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: File(${value.name}, ${value.type}, ${value.size} bytes)`);
-        } else {
-          console.log(`  ${key}: ${value}`);
-        }
-      }
-
-      const response = await fetch("http://localhost:8000/predict", {
+      const response = await fetch(API_URL, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Validation failures (HTTP 422) carry a readable "message" explaining which input to fix.
+        const body = await response.json().catch(() => null);
+        throw new ApiError(response.status, body?.message)
       }
 
-      const result = await response.json();
-      console.log("✅ API Response:", result);
-      setStressResult(result);
+      setStressResult(await response.json());
     } catch (error) {
-      console.error("❌ Error analyzing comprehensive data:", error);
+      console.error("Stress analysis failed:", error);
       setError(
-        error instanceof Error && error.message.startsWith("HTTP error")
-          ? `The analysis service returned an error (${error.message.replace("HTTP error! ", "")}). Please check your file and try again.`
+        error instanceof ApiError
+          ? error.detail ?? `The analysis service returned an error (status ${error.status}). Please check your inputs and try again.`
           : "Something went wrong while analyzing. Make sure the SafeSpace API is running, then try again.",
       );
     } finally {
@@ -252,11 +235,8 @@ export default function CheckPage() {
   };
 
   const getCompletionPercentage = () => {
-    let completed = 0
-    if (uploadedFile) completed += 40
-    if (dass21Responses.some((response) => response > 0)) completed += 40
-    if (audioFile) completed += 20
-    return completed
+    const done = [uploadedFile !== null, dass21Responses.some((response) => response > 0), audioFile !== null]
+    return Math.round((done.filter(Boolean).length / done.length) * 100)
   }
 
   const formatTime = (seconds: number) => {
@@ -334,7 +314,7 @@ export default function CheckPage() {
                 <input
                   id="file-upload"
                   type="file"
-                  accept=".csv,.json"
+                  accept=".csv"
                   onChange={handleFileUpload}
                   className="peer sr-only"
                   aria-describedby="file-upload-hint"
@@ -366,7 +346,7 @@ export default function CheckPage() {
                       <>
                         <span className="block font-semibold text-ink">Upload physiological data</span>
                         <span id="file-upload-hint" className="mt-0.5 block text-sm text-muted-foreground">
-                          Drop a CSV or JSON file here, or browse your files.
+                          Drop a CSV file (ECG, EDA, EMG, Temp at 100 Hz) here, or browse.
                         </span>
                       </>
                     )}
@@ -535,12 +515,12 @@ export default function CheckPage() {
               )}
 
               <div className="mt-6 flex flex-col gap-3 border-t border-ink/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3, M4A or WebM.</p>
+                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3, M4A, FLAC, OGG or WebM. The first 5 seconds are analysed.</p>
                 <div>
                   <input
                     id="audio-upload"
                     type="file"
-                    accept=".wav,.mp3,.m4a,.webm"
+                    accept=".wav,.mp3,.m4a,.flac,.ogg,.webm"
                     onChange={handleAudioUpload}
                     className="peer sr-only"
                   />

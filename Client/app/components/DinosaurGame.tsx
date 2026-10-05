@@ -23,7 +23,7 @@ interface Obstacle {
 
 export default function DinosaurGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const animationRef = useRef<number>()
+  const animationRef = useRef<number | undefined>(undefined)
   
   const [gameState, setGameState] = useState<GameState>({
     isRunning: false,

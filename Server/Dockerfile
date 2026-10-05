@@ -1,9 +1,9 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies for librosa and others
-RUN apt-get update && apt-get install -y \
+# ffmpeg decodes browser recordings (WebM/Opus), M4A and MP3; libsndfile reads WAV/FLAC/OGG.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
@@ -11,8 +11,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY main.py latefusion_final.py ./
+COPY safespace ./safespace
+COPY models ./models
 
-EXPOSE 8080
+# The frontend calls http://localhost:8000/predict.
+EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"] 
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
