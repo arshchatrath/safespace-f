@@ -50,8 +50,6 @@ python3.11 -m venv .venv
 .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-Or with Docker: `docker build -t safespace-api Server && docker run -p 8000:8000 safespace-api`.
-
 Frontend, in a second terminal:
 
 ```bash

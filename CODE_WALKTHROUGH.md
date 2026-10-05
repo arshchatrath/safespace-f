@@ -63,8 +63,7 @@ safespace-f/
     ├── models/                    saved artifacts (see table below)
     ├── tests/                     pytest suite (63 tests) + synthetic speech fixture
     ├── requirements.txt           pinned runtime dependencies
-    ├── requirements-dev.txt       + pytest, httpx
-    └── Dockerfile                 python:3.11-slim + ffmpeg, serves on port 8000
+    └── requirements-dev.txt       + pytest, httpx
 ```
 
 ### Model artifacts
