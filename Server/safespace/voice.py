@@ -142,13 +142,19 @@ _attention_encoders = {}
 
 
 def attention_over_time(model, features):
-    """Attention weight the model gives each of the 228 MFCC frames (inference mode)."""
+    """Attention weight the model gives each of the 228 MFCC frames (inference mode).
+
+    Runs the layers before the Attention layer with ``predict`` (compiled, dropout off),
+    then applies the layer's own formula, softmax(tanh(x . W + b)) over time, in NumPy.
+    """
     attention_layer = next(layer for layer in model.layers if isinstance(layer, Attention))
     if id(model) not in _attention_encoders:
         _attention_encoders[id(model)] = tf.keras.Model(model.inputs, attention_layer.input)
-    sequence = _attention_encoders[id(model)](features, training=False)
-    weights = attention_layer.attention_weights(sequence)
-    return np.asarray(weights)[0, :, 0]
+    sequence = _attention_encoders[id(model)].predict(features, verbose=0)[0]  # (228, 128)
+    W, b = (np.asarray(w) for w in attention_layer.get_weights())
+    scores = np.tanh(sequence @ W + b)[:, 0]
+    weights = np.exp(scores - scores.max())
+    return weights / weights.sum()
 
 
 def frames_to_seconds(frames, sample_rate):

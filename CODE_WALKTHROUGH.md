@@ -46,6 +46,8 @@ safespace-f/
 │   │   ├── page.tsx               landing page
 │   │   ├── check/page.tsx         the assessment: CSV upload, 7 answers, voice recording, submit
 │   │   ├── check/results.tsx      renders the API response
+│   │   ├── check/analysis.ts      client for /predict/stream (upload + stage progress)
+│   │   ├── check/AnalysisProgress.tsx  progress bar shown while the models run
 │   │   ├── stress-buster/page.tsx two relaxation mini-games
 │   │   └── components/            landing sections, navbar, footer, games
 │   └── package.json               pnpm 10.10.0; next, react, gsap, lucide-react, tailwindcss
@@ -61,7 +63,7 @@ safespace-f/
     │   ├── explanations.py        SHAP, attention and fusion-weight explanations
     │   └── artifacts.py           loads all models once at startup
     ├── models/                    saved artifacts (see table below)
-    ├── tests/                     pytest suite (69 tests) + synthetic speech fixture
+    ├── tests/                     pytest suite (72 tests) + synthetic speech fixture
     ├── requirements.txt           pinned runtime dependencies
     └── requirements-dev.txt       + pytest, httpx
 ```
@@ -139,10 +141,29 @@ Responses:
 
 `confidence` is the largest fused probability. It is not a measured accuracy.
 
-`/predict` is a synchronous endpoint, so FastAPI runs it in a worker thread and the server keeps
-answering other requests (e.g. `/health`) during the ~2 s of model work. Model calls are
-serialised by a lock because the shap `KernelExplainer` keeps per-call state on its instance;
-concurrent predictions therefore queue rather than run in parallel.
+`POST /predict/stream` takes the same form and returns the same result, streamed as
+newline-delimited JSON so the frontend can show real progress:
+
+```text
+{"type": "queued"}                                           only if another analysis is running
+{"type": "stage", "stage": "physiological", "index": 1, "total": 5}
+{"type": "stage", "stage": "questionnaire", "index": 2, "total": 5}
+{"type": "stage", "stage": "voice", "index": 3, "total": 5}
+{"type": "stage", "stage": "fusion", "index": 4, "total": 5}
+{"type": "stage", "stage": "explanations", "index": 5, "total": 5}
+{"type": "result", "status": 200, "body": { ...same as /predict... }}
+```
+
+Upload problems (wrong type, too large) are a normal 413/422 response before streaming starts;
+pipeline errors arrive as a `result` event with `status` 422 or 500 and the usual error body.
+Both endpoints run the same `_run_pipeline` function in `main.py`.
+
+Both endpoints are synchronous, so the pipeline runs in a worker thread and the server keeps
+answering other requests (e.g. `/health`) during model work. Model calls are serialised by a
+lock because the shap `KernelExplainer` keeps per-call state on its instance; concurrent
+predictions therefore queue rather than run in parallel. TensorFlow compiles its prediction
+functions on first use, so `load_models` runs the voice model once on a blank input at startup
+(startup ≈ 7 s); after that a request took 0.2–0.45 s on the CPU-only test machine.
 
 `GET /health` returns the loaded model types, the voice input shape and the physiological
 feature count.
@@ -415,8 +436,14 @@ pre-selected), and a recording or audio file exists. The recorder uses `MediaRec
 first format the browser supports — WebM/Opus in Chrome, Edge and Firefox, MP4/AAC (sent as
 `.m4a`) in Safari — and lets the user play back or discard the clip; leaving the page releases the
 microphone. The page posts `physiological_file`, `dass21_responses` (comma list) and
-`voice_audio` to `${NEXT_PUBLIC_API_URL}/predict` (default `http://localhost:8000`); on a 422 or
-413 it shows the API's `message`.
+`voice_audio` to `${NEXT_PUBLIC_API_URL}/predict/stream` (default `http://localhost:8000`) with
+`XMLHttpRequest`, which reports upload progress and lets the page read stage events as they
+stream in. `AnalysisProgress.tsx` turns them into a progress bar, shown under the Analyze button
+and, with the list of steps, in the results area. Each step owns a slice of the bar (upload
+0–15 %, body signals –30 %, answers –38 %, voice –80 %, combining –84 %, explanations –97 %);
+upload progress is exact, and within a server stage the bar eases toward the end of that slice
+but only moves past it when the server reports the next stage. On a 422 or 413 the page shows
+the API's `message`.
 `Client/app/check/results.tsx` renders the fused and per-model probabilities, the fusion shares,
 SHAP directions, questionnaire statements and voice attention.
 
@@ -427,7 +454,7 @@ SHAP directions, questionnaire statements and voice attention.
 ```bash
 cd Server
 python -m pip install -r requirements-dev.txt
-python -m pytest            # 69 tests, ~15-40 s, loads the real models
+python -m pytest            # 72 tests, ~15-40 s, loads the real models
 ```
 
 | File | Covers |
@@ -436,7 +463,7 @@ python -m pytest            # 69 tests, ~15-40 s, loads the real models
 | `test_questionnaire.py` | input formats and rejections; item order; bit-identical output vs. pre-refactor; 0s → Low, 3s → High; model structure |
 | `test_voice.py` | model shapes; decoding and resampling; truncation; output differs from the zero-input output; sample-rate invariance (16 kHz vs. 48 kHz); attention sums to 1; empty, corrupt, wrong-format and silent audio rejected; late speech start rejected, short pause accepted; 60 s decode cap; browser WebM decoding (skipped without ffmpeg) |
 | `test_fusion.py` | formula, weights, required modalities, malformed inputs, saved artifact parity |
-| `test_api.py` | full `/predict` with all three models; response contract used by the frontend; fusion recomputed from the response; all explanations available; SHAP additivity; voice required; bad inputs → 422; oversized upload → 413; endpoint runs off the event loop; `/health` |
+| `test_api.py` | full `/predict` with all three models; response contract used by the frontend; fusion recomputed from the response; all explanations available; SHAP additivity; voice required; bad inputs → 422; oversized upload → 413; endpoint runs off the event loop; `/predict/stream` stage order, identical result, errors in the result event, upload errors before streaming; `/health` |
 
 These are software tests. The CSV and speech fixtures are synthetic; no test measures how
 accurately SafeSpace detects stress in real people.
@@ -452,7 +479,7 @@ accurately SafeSpace detects stress in real people.
 | Physiological label mapping (which WESAD condition is "High") | **unverified**; a removed script suggests High = baseline |
 | Questionnaire training data (64 samples) and labelling | **unverified** |
 | Voice training corpus, emotion → stress mapping, sample rate | **unverified**; 22,050 Hz inferred |
-| Landing-page figures "73%+ detection accuracy" and "<100ms response latency" | **unverified**: no evaluation results are in the repository. A warm `/predict` request (three models plus explanations) took 1.5–1.9 s on this CPU-only test machine |
+| Landing-page figures "73%+ detection accuracy" and "<100ms response latency" | **unverified**: no evaluation results are in the repository. A `/predict` request (three models plus explanations) took 0.2–0.45 s on this CPU-only test machine after startup warm-up |
 | LIME and Integrated Gradients (named on the landing page) | **not implemented**: only SHAP and attention weights are computed. `lime` was imported but never called and has been removed from the requirements |
 | Late-fusion weights 0.60 / 0.25 / 0.15 | fixed in code; how they were chosen is undocumented; `lateFusion.pkl` (a different, unloadable fusion model) suggests a learned variant existed |
 | Real ECG/EDA/EMG/Temp recordings and real speech for end-to-end checks | **missing**; only synthetic fixtures |

@@ -73,7 +73,9 @@ before building it.
 
 `POST /predict` requires all three form fields: `physiological_file` (CSV with `ECG`, `EDA`,
 `EMG`, `Temp` at 100 Hz, at least 1,000 rows), `dass21_responses` (seven numbers 0–3) and
-`voice_audio`. Invalid input returns HTTP 422 with a message explaining what to fix.
+`voice_audio`. Invalid input returns HTTP 422 with a message explaining what to fix. The frontend
+uses `POST /predict/stream`, which takes the same fields and streams each model stage as it
+runs so the page can show a progress bar.
 
 The sample CSV and the test speech clip are synthetic. They show that the pipeline runs, not
 that its estimates are accurate.

@@ -1,5 +1,7 @@
 """End-to-end tests of POST /predict with the real models (all three modalities together)."""
 
+import json
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -148,5 +150,42 @@ def test_oversized_upload_rejected(client, sample_csv_bytes, monkeypatch):
 
     monkeypatch.setattr(main, "MAX_AUDIO_BYTES", 1024)
     response = post(client, sample_csv_bytes, audio=b"\0" * 2048)
+    assert response.status_code == 413
+    assert "larger than" in response.json()["message"]
+
+
+def stream(client, csv, audio, answers=ANSWERS):
+    files = {"physiological_file": ("signals.csv", csv, "text/csv"), "voice_audio": ("voice.wav", audio, "audio/wav")}
+    response = client.post("/predict/stream", files=files, data={"dass21_responses": answers})
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    return response, events
+
+
+def test_stream_reports_every_stage_then_the_same_result(client, sample_csv_bytes, speech_wav_bytes, result):
+    response, events = stream(client, sample_csv_bytes, speech_wav_bytes)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    stages = [e["stage"] for e in events if e["type"] == "stage"]
+    assert stages == ["physiological", "questionnaire", "voice", "fusion", "explanations"]
+    assert [e["index"] for e in events if e["type"] == "stage"] == [1, 2, 3, 4, 5]
+    final = events[-1]
+    assert final["type"] == "result" and final["status"] == 200
+    assert final["body"]["predictions"] == result["predictions"]
+
+
+def test_stream_reports_pipeline_errors_in_the_result_event(client, sample_csv_bytes):
+    silence = wav_bytes(np.zeros(VOICE_SAMPLE_RATE * 2), VOICE_SAMPLE_RATE)
+    response, events = stream(client, sample_csv_bytes, silence)
+    assert response.status_code == 200
+    assert [e["stage"] for e in events if e["type"] == "stage"] == ["physiological", "questionnaire", "voice"]
+    assert events[-1]["status"] == 422
+    assert "silent" in events[-1]["body"]["message"]
+
+
+def test_stream_rejects_bad_uploads_before_streaming(client, sample_csv_bytes, speech_wav_bytes, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "MAX_AUDIO_BYTES", 1024)
+    response, _ = stream(client, sample_csv_bytes, speech_wav_bytes)
     assert response.status_code == 413
     assert "larger than" in response.json()["message"]

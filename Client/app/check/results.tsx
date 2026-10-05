@@ -3,6 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { Activity, Mic, FileText, ArrowRight, Info } from "lucide-react"
+import { DetailedProgress, type ProgressView } from "./AnalysisProgress"
 
 interface StressResult {
   success: boolean
@@ -82,6 +83,7 @@ interface ResultsProps {
   result: StressResult | null
   isLoading: boolean
   analyzedAt?: Date | null
+  progress?: ProgressView | null
 }
 
 const LEVELS = ["Low", "Medium", "High"] as const
@@ -188,7 +190,7 @@ const formatVoiceFeatureName = (feature: string) => {
   return level ? `${level} stress score` : "Voice score"
 }
 
-const Results: React.FC<ResultsProps> = ({ result, isLoading, analyzedAt }) => {
+const Results: React.FC<ResultsProps> = ({ result, isLoading, analyzedAt, progress }) => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center rounded-3xl border border-ink/10 bg-card px-6 py-16 text-center">
@@ -200,6 +202,11 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading, analyzedAt }) => {
         <p className="mt-2 max-w-md text-muted-foreground">
           Reading your body data, voice and questionnaire answers.
         </p>
+        {progress && (
+          <div className="mt-8 flex w-full justify-center">
+            <DetailedProgress view={progress} />
+          </div>
+        )}
       </div>
     )
   }

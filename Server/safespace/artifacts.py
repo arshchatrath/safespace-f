@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import joblib
+import numpy as np
 from tensorflow.keras.models import load_model
 
-from . import config
+from . import config, voice
 from .explanations import Explainer
 from .fusion import PhysioDominantFusion
 from .voice import Attention
@@ -29,6 +30,10 @@ def load_models():
     questionnaire_model = joblib.load(config.QUESTIONNAIRE_MODEL_PATH)
     questionnaire_scaler = joblib.load(config.QUESTIONNAIRE_SCALER_PATH)
     voice_model = load_model(config.VOICE_MODEL_PATH, compile=False, custom_objects={"Attention": Attention})
+    # TensorFlow compiles its prediction functions on first use (~5 s); do it now, not on the first request.
+    blank = np.zeros((1, config.MFCC_FRAMES, config.N_MFCC, 1), dtype=np.float32)
+    voice.predict(voice_model, blank)
+    voice.attention_over_time(voice_model, blank)
     return Models(
         physiological=physio,
         questionnaire=questionnaire_model,

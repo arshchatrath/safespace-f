@@ -7,6 +7,8 @@ import { gsap } from "gsap"
 import Link from "next/link"
 import { Mic, Square, Upload, FileCheck2, AlertCircle, Check, Watch, AudioLines, X, ArrowRight } from "lucide-react"
 import Results from "./results"
+import { analyzeWithProgress, ApiError, type AnalysisProgress } from "./analysis"
+import { CompactProgress, useProgressView } from "./AnalysisProgress"
 
 const DASS21_QUESTIONS = [
   "I found it hard to wind down",                  // q1(S)
@@ -27,7 +29,7 @@ const SCALE = [
 
 const PHYSIO_EXTENSIONS = [".csv"]
 // Set NEXT_PUBLIC_API_URL (e.g. in Client/.env.local) when the backend is not on localhost:8000.
-const API_URL = `${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "")}/predict`
+const API_URL = `${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "")}/predict/stream`
 
 // Browsers support different recording formats (Safari records MP4/AAC, not WebM).
 // Each maps to a file extension the backend accepts.
@@ -59,12 +61,6 @@ function microphoneErrorMessage(err: unknown) {
   return "Recording isn't available in this browser. Upload an audio file instead."
 }
 
-class ApiError extends Error {
-  constructor(public status: number, public detail?: string) {
-    super(`HTTP ${status}`)
-  }
-}
-
 export default function CheckPage() {
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
@@ -76,6 +72,9 @@ export default function CheckPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioSource, setAudioSource] = useState<"recording" | "upload" | null>(null)
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null)
+  const [progress, setProgress] = useState<AnalysisProgress | null>(null)
+  const progressView = useProgressView(progress)
+  const analysisAbortRef = useRef<AbortController | null>(null)
   const [audioURL, setAudioURL] = useState<string | null>(null)
   const [recordingTime, setRecordingTime] = useState(0)
   const [micError, setMicError] = useState<string | null>(null)
@@ -266,6 +265,7 @@ export default function CheckPage() {
       }
       streamRef.current?.getTracks().forEach((track) => track.stop())
       if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current)
+      analysisAbortRef.current?.abort()
     }
   }, [])
 
@@ -282,20 +282,14 @@ export default function CheckPage() {
       formData.append("dass21_responses", dass21Responses.map((value) => value ?? 0).join(","));
       formData.append("voice_audio", audioFile, audioFile.name);
 
-      const response = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        // Validation failures (HTTP 422) carry a readable "message" explaining which input to fix.
-        const body = await response.json().catch(() => null);
-        throw new ApiError(response.status, body?.message)
-      }
-
-      setStressResult(await response.json());
+      const controller = new AbortController()
+      analysisAbortRef.current = controller
+      // Validation failures carry a readable "message" explaining which input to fix (see ApiError).
+      const result = await analyzeWithProgress(API_URL, formData, setProgress, controller.signal)
+      setStressResult(result);
       setAnalyzedAt(new Date());
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return
       console.error("Stress analysis failed:", error);
       setError(
         error instanceof ApiError
@@ -334,7 +328,7 @@ export default function CheckPage() {
   ]
 
   const statusMessage = isLoading
-    ? "Analyzing your data."
+    ? `Analyzing: ${progressView?.label ?? "starting"}.`
     : error
       ? error
       : stressResult?.predictions?.prediction_label
@@ -676,6 +670,8 @@ export default function CheckPage() {
                 )}
               </button>
 
+              {isLoading && progressView && <CompactProgress view={progressView} />}
+
               {!allDataReady && (
                 <p className="mt-4 text-sm leading-relaxed text-paper/60">
                   {uploadedFile && !hasQuestionnaire
@@ -701,7 +697,7 @@ export default function CheckPage() {
             </h2>
             <p className="eyebrow">Results</p>
           </div>
-          <Results result={stressResult} isLoading={isLoading} analyzedAt={analyzedAt} />
+          <Results result={stressResult} isLoading={isLoading} analyzedAt={analyzedAt} progress={progressView} />
         </section>
       </div>
     </main>
