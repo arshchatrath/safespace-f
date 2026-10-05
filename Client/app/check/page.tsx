@@ -7,6 +7,8 @@ import { gsap } from "gsap"
 import Link from "next/link"
 import { Mic, Square, Upload, FileCheck2, AlertCircle, Check, Watch, AudioLines, X, ArrowRight } from "lucide-react"
 import Results from "./results"
+import { analyzeWithProgress, ApiError, type AnalysisProgress } from "./analysis"
+import { CompactProgress, useProgressView } from "./AnalysisProgress"
 
 const DASS21_QUESTIONS = [
   "I found it hard to wind down",                  // q1(S)
@@ -25,16 +27,54 @@ const SCALE = [
   { value: 3, label: "Almost always" },
 ]
 
-const PHYSIO_EXTENSIONS = [".csv", ".json"]
+const PHYSIO_EXTENSIONS = [".csv"]
+// Set NEXT_PUBLIC_API_URL (e.g. in Client/.env.local) when the backend is not on localhost:8000.
+const API_URL = `${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "")}/predict/stream`
+
+// Browsers support different recording formats (Safari records MP4/AAC, not WebM).
+// Each maps to a file extension the backend accepts.
+const RECORDING_FORMATS = [
+  { mimeType: "audio/webm;codecs=opus", extension: ".webm" },
+  { mimeType: "audio/webm", extension: ".webm" },
+  { mimeType: "audio/mp4", extension: ".m4a" },
+  { mimeType: "audio/ogg;codecs=opus", extension: ".ogg" },
+]
+
+function pickRecordingFormat() {
+  return RECORDING_FORMATS.find((format) => MediaRecorder.isTypeSupported(format.mimeType))
+}
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType.includes("mp4") || mimeType.includes("aac")) return ".m4a"
+  if (mimeType.includes("ogg")) return ".ogg"
+  return ".webm"
+}
+
+function microphoneErrorMessage(err: unknown) {
+  const name = err instanceof DOMException ? err.name : ""
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone access was blocked. Allow it in your browser's site settings, or upload an audio file instead."
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return "No microphone was found. Connect one, or upload an audio file instead."
+  }
+  return "Recording isn't available in this browser. Upload an audio file instead."
+}
 
 export default function CheckPage() {
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
-  const [dass21Responses, setDass21Responses] = useState<number[]>(new Array(7).fill(0))
+  // null = not answered yet; every statement must be answered (0 "Never" is a valid answer).
+  const [dass21Responses, setDass21Responses] = useState<(number | null)[]>(new Array(DASS21_QUESTIONS.length).fill(null))
   const [stressResult, setStressResult] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioSource, setAudioSource] = useState<"recording" | "upload" | null>(null)
+  const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null)
+  const [progress, setProgress] = useState<AnalysisProgress | null>(null)
+  const progressView = useProgressView(progress)
+  const analysisAbortRef = useRef<AbortController | null>(null)
   const [audioURL, setAudioURL] = useState<string | null>(null)
   const [recordingTime, setRecordingTime] = useState(0)
   const [micError, setMicError] = useState<string | null>(null)
@@ -45,6 +85,8 @@ export default function CheckPage() {
 
   // Audio recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const audioURLRef = useRef<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -72,7 +114,7 @@ export default function CheckPage() {
   // All three inputs are required before analysis can start.
   useEffect(() => {
     const hasPhysiological = uploadedFile !== null
-    const hasQuestionnaire = dass21Responses.some((response) => response > 0)
+    const hasQuestionnaire = dass21Responses.every((response) => response !== null)
     const hasVoice = audioFile !== null
 
     setAllDataReady(hasPhysiological && hasQuestionnaire && hasVoice)
@@ -86,6 +128,8 @@ export default function CheckPage() {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    // Reset so choosing the same file again still fires onChange.
+    event.target.value = ""
     if (file) {
       setDropError(null)
       setUploadedFile(file)
@@ -98,18 +142,29 @@ export default function CheckPage() {
     const file = event.dataTransfer.files?.[0]
     if (!file) return
     if (!PHYSIO_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
-      setDropError("That file type isn't supported. Please use a .csv or .json file.")
+      setDropError("That file type isn't supported. Please use a .csv file.")
       return
     }
     setDropError(null)
     setUploadedFile(file)
   }
 
+  // Keeps the playback URL in sync with the current audio and frees the previous one.
+  const replaceAudio = (file: File | null, source: "recording" | "upload" | null) => {
+    if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current)
+    const url = file ? URL.createObjectURL(file) : null
+    audioURLRef.current = url
+    setAudioURL(url)
+    setAudioFile(file)
+    setAudioSource(source)
+  }
+
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    event.target.value = ""
     if (file) {
-      setAudioFile(file)
-      setAudioURL(URL.createObjectURL(file))
+      setMicError(null)
+      replaceAudio(file, "upload")
     }
   }
 
@@ -117,9 +172,19 @@ export default function CheckPage() {
     setDeviceConnected(!deviceConnected)
   }
 
+  const releaseMicrophone = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+  }
+
   const startRecording = async () => {
+    setMicError(null)
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      // getUserMedia is only available on HTTPS or localhost.
+      setMicError("Recording needs a secure (HTTPS) connection in a supported browser. Upload an audio file instead.")
+      return
+    }
     try {
-      setMicError(null)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -127,30 +192,33 @@ export default function CheckPage() {
           sampleRate: 44100
         }
       });
+      streamRef.current = stream
 
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      const format = pickRecordingFormat()
+      const recorder = new MediaRecorder(stream, format ? { mimeType: format.mimeType } : undefined)
+      mediaRecorderRef.current = recorder
 
       const chunks: Blob[] = [];
 
-      mediaRecorderRef.current.ondataavailable = (event) => {
+      recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunks.push(event.data);
         }
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const audioFile = new File([blob], "recorded_audio.webm", { type: "audio/webm" });
-        setAudioFile(audioFile);
-        setAudioURL(URL.createObjectURL(blob));
-
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+      recorder.onstop = () => {
+        releaseMicrophone()
+        const mimeType = recorder.mimeType || format?.mimeType || "audio/webm"
+        const type = mimeType.split(";")[0]
+        const blob = new Blob(chunks, { type })
+        if (blob.size === 0) {
+          setMicError("Nothing was recorded. Please try again.")
+          return
+        }
+        replaceAudio(new File([blob], `recorded_audio${extensionForMimeType(mimeType)}`, { type }), "recording")
       };
 
-      mediaRecorderRef.current.start();
+      recorder.start();
       setIsRecording(true);
       setRecordingTime(0);
 
@@ -161,7 +229,8 @@ export default function CheckPage() {
 
     } catch (err) {
       console.error('Error starting recording:', err);
-      setMicError("We couldn't access your microphone. Check your browser permissions, or upload an audio file instead.");
+      releaseMicrophone()
+      setMicError(microphoneErrorMessage(err));
     }
   };
 
@@ -185,9 +254,18 @@ export default function CheckPage() {
     }
   };
 
+  // Leaving the page mid-recording must turn the microphone off and free the playback URL.
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
+      const recorder = mediaRecorderRef.current
+      if (recorder && recorder.state !== "inactive") {
+        recorder.onstop = null
+        recorder.stop()
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      if (audioURLRef.current) URL.revokeObjectURL(audioURLRef.current)
+      analysisAbortRef.current?.abort()
     }
   }, [])
 
@@ -196,54 +274,26 @@ export default function CheckPage() {
 
     setIsLoading(true);
     setError(null);
+    setStressResult(null);
     try {
-      // Convert DASS-21 integer responses to a comma-separated string
-      const dass21ResponseString = dass21Responses.join(",");
-
+      // Field names and formats must match Server/main.py POST /predict.
       const formData = new FormData();
       formData.append("physiological_file", uploadedFile);
-      formData.append("dass21_responses", dass21ResponseString);
-
+      formData.append("dass21_responses", dass21Responses.map((value) => value ?? 0).join(","));
       formData.append("voice_audio", audioFile, audioFile.name);
-      console.log("✅ Voice audio file details:", {
-        name: audioFile.name,
-        type: audioFile.type,
-        size: audioFile.size,
-        lastModified: audioFile.lastModified
-      });
 
-      // Debug prints
-      console.log("✅ Sending physiological_file:", uploadedFile.name);
-      console.log("✅ DASS-21 Responses:", dass21ResponseString);
-      console.log("✅ Voice audio file:", audioFile.name);
-
-      // Debug: Log FormData contents
-      console.log("📋 FormData contents:");
-      for (let [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: File(${value.name}, ${value.type}, ${value.size} bytes)`);
-        } else {
-          console.log(`  ${key}: ${value}`);
-        }
-      }
-
-      const response = await fetch("http://localhost:8000/predict", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("✅ API Response:", result);
+      const controller = new AbortController()
+      analysisAbortRef.current = controller
+      // Validation failures carry a readable "message" explaining which input to fix (see ApiError).
+      const result = await analyzeWithProgress(API_URL, formData, setProgress, controller.signal)
       setStressResult(result);
+      setAnalyzedAt(new Date());
     } catch (error) {
-      console.error("❌ Error analyzing comprehensive data:", error);
+      if (error instanceof DOMException && error.name === "AbortError") return
+      console.error("Stress analysis failed:", error);
       setError(
-        error instanceof Error && error.message.startsWith("HTTP error")
-          ? `The analysis service returned an error (${error.message.replace("HTTP error! ", "")}). Please check your file and try again.`
+        error instanceof ApiError
+          ? error.detail ?? `The analysis service returned an error (status ${error.status}). Please check your inputs and try again.`
           : "Something went wrong while analyzing. Make sure the SafeSpace API is running, then try again.",
       );
     } finally {
@@ -252,11 +302,8 @@ export default function CheckPage() {
   };
 
   const getCompletionPercentage = () => {
-    let completed = 0
-    if (uploadedFile) completed += 40
-    if (dass21Responses.some((response) => response > 0)) completed += 40
-    if (audioFile) completed += 20
-    return completed
+    const done = [uploadedFile !== null, dass21Responses.every((response) => response !== null), audioFile !== null]
+    return Math.round((done.filter(Boolean).length / done.length) * 100)
   }
 
   const formatTime = (seconds: number) => {
@@ -266,15 +313,12 @@ export default function CheckPage() {
   };
 
   const clearAudio = () => {
-    if (audioURL) {
-      URL.revokeObjectURL(audioURL);
-    }
-    setAudioURL(null);
-    setAudioFile(null);
+    replaceAudio(null, null)
     setRecordingTime(0);
   };
 
-  const hasQuestionnaire = dass21Responses.some((response) => response > 0)
+  const answeredCount = dass21Responses.filter((response) => response !== null).length
+  const hasQuestionnaire = answeredCount === DASS21_QUESTIONS.length
   const completion = getCompletionPercentage()
 
   const checklist = [
@@ -284,7 +328,7 @@ export default function CheckPage() {
   ]
 
   const statusMessage = isLoading
-    ? "Analyzing your data."
+    ? `Analyzing: ${progressView?.label ?? "starting"}.`
     : error
       ? error
       : stressResult?.predictions?.prediction_label
@@ -334,7 +378,7 @@ export default function CheckPage() {
                 <input
                   id="file-upload"
                   type="file"
-                  accept=".csv,.json"
+                  accept=".csv"
                   onChange={handleFileUpload}
                   className="peer sr-only"
                   aria-describedby="file-upload-hint"
@@ -366,7 +410,7 @@ export default function CheckPage() {
                       <>
                         <span className="block font-semibold text-ink">Upload physiological data</span>
                         <span id="file-upload-hint" className="mt-0.5 block text-sm text-muted-foreground">
-                          Drop a CSV or JSON file here, or browse your files.
+                          Drop a CSV file (ECG, EDA, EMG, Temp at 100 Hz) here, or browse.
                         </span>
                       </>
                     )}
@@ -527,7 +571,7 @@ export default function CheckPage() {
                   </div>
                   <p className="mt-3 flex items-center gap-2 text-sm text-ink" aria-live="polite">
                     <Check className="h-4 w-4 text-pine" strokeWidth={3} aria-hidden="true" />
-                    {audioFile && audioFile.name === "recorded_audio.webm"
+                    {audioSource === "recording"
                       ? "Voice recorded successfully. Play it back to check before submitting."
                       : `${audioFile?.name ?? "Audio"} uploaded. Play it back to check before submitting.`}
                   </p>
@@ -535,18 +579,20 @@ export default function CheckPage() {
               )}
 
               <div className="mt-6 flex flex-col gap-3 border-t border-ink/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3, M4A or WebM.</p>
+                <p className="text-sm text-muted-foreground">Prefer a file? WAV, MP3, M4A, FLAC, OGG or WebM. The first 5 seconds are analysed.</p>
                 <div>
                   <input
                     id="audio-upload"
                     type="file"
-                    accept=".wav,.mp3,.m4a,.webm"
+                    accept=".wav,.mp3,.m4a,.flac,.ogg,.webm"
                     onChange={handleAudioUpload}
+                    disabled={isRecording}
                     className="peer sr-only"
                   />
                   <label
                     htmlFor="audio-upload"
-                    className="btn-ghost cursor-pointer !min-h-[40px] !py-2 text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card"
+                    aria-disabled={isRecording}
+                    className="btn-ghost cursor-pointer aria-disabled:cursor-not-allowed aria-disabled:opacity-50 !min-h-[40px] !py-2 text-sm peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card"
                   >
                     <AudioLines className="h-4 w-4" aria-hidden="true" />
                     Upload audio file
@@ -624,10 +670,12 @@ export default function CheckPage() {
                 )}
               </button>
 
+              {isLoading && progressView && <CompactProgress view={progressView} />}
+
               {!allDataReady && (
                 <p className="mt-4 text-sm leading-relaxed text-paper/60">
                   {uploadedFile && !hasQuestionnaire
-                    ? "Rate at least one statement above 0 to continue."
+                    ? `Answer all seven statements to continue (${answeredCount} of 7 answered).`
                     : uploadedFile && hasQuestionnaire && !audioFile
                       ? "Record or upload a voice sample to continue."
                       : "Add physiological data, answer the questionnaire, and include a voice sample to continue."}
@@ -649,7 +697,7 @@ export default function CheckPage() {
             </h2>
             <p className="eyebrow">Results</p>
           </div>
-          <Results result={stressResult} isLoading={isLoading} />
+          <Results result={stressResult} isLoading={isLoading} analyzedAt={analyzedAt} progress={progressView} />
         </section>
       </div>
     </main>

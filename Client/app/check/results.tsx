@@ -3,6 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { Activity, Mic, FileText, ArrowRight, Info } from "lucide-react"
+import { DetailedProgress, type ProgressView } from "./AnalysisProgress"
 
 interface StressResult {
   success: boolean
@@ -19,6 +20,7 @@ interface StressResult {
     physiological: {
       available: boolean
       method: string
+      target_class?: string
       feature_importance: Array<{
         feature: string
         importance: number
@@ -29,8 +31,10 @@ interface StressResult {
     questionnaire: {
       available: boolean
       method: string
+      target_class?: string
       feature_importance: Array<{
         feature: string
+        question?: string
         importance: number
         abs_importance: number
         value: number
@@ -46,6 +50,7 @@ interface StressResult {
         abs_importance: number
         value: number
       }>
+      attention?: { share_on_recorded_audio: number; peak_times_sec: number[] }
       summary: string
     }
     fusion: {
@@ -57,6 +62,8 @@ interface StressResult {
         predicted_class: number
         confidence: number
         entropy: number
+        base_weight?: number
+        effective_weight?: number
         contribution_score: number
       }>
       summary: string
@@ -67,6 +74,7 @@ interface StressResult {
     physio_features: number
     dass21_values: number[]
     voice_provided: boolean
+    voice_seconds_analysed?: number
     modalities_used: string[]
   }
 }
@@ -74,6 +82,8 @@ interface StressResult {
 interface ResultsProps {
   result: StressResult | null
   isLoading: boolean
+  analyzedAt?: Date | null
+  progress?: ProgressView | null
 }
 
 const LEVELS = ["Low", "Medium", "High"] as const
@@ -136,6 +146,12 @@ const FEATURE_LABELS: Record<string, string> = {
   heart_rate: "estimated heartbeats per minute",
 }
 
+const MODALITY_LABELS: Record<string, string> = {
+  physiological: "Body signals",
+  questionnaire: "Your answers",
+  voice: "Voice",
+}
+
 const pct = (value: number | undefined | null) => `${((value ?? 0) * 100).toFixed(1)}%`
 
 const formatFeatureName = (feature: string) => {
@@ -174,7 +190,7 @@ const formatVoiceFeatureName = (feature: string) => {
   return level ? `${level} stress score` : "Voice score"
 }
 
-const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
+const Results: React.FC<ResultsProps> = ({ result, isLoading, analyzedAt, progress }) => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center rounded-3xl border border-ink/10 bg-card px-6 py-16 text-center">
@@ -186,6 +202,11 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
         <p className="mt-2 max-w-md text-muted-foreground">
           Reading your body data, voice and questionnaire answers.
         </p>
+        {progress && (
+          <div className="mt-8 flex w-full justify-center">
+            <DetailedProgress view={progress} />
+          </div>
+        )}
       </div>
     )
   }
@@ -234,7 +255,7 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
       name: "Voice",
       icon: Mic,
       probs: predictions.voice_probs,
-      meta: metadata.voice_provided ? "Voice data provided" : "Voice data not provided",
+      meta: metadata.voice_seconds_analysed ? `${metadata.voice_seconds_analysed.toFixed(1)} s of audio analysed` : "Voice recording",
     },
   ]
 
@@ -275,7 +296,7 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
 
           {style.note && <p className="mt-8 border-t border-ink/10 pt-6 leading-relaxed text-ink/80">{style.note}</p>}
           {(levelKey === "medium" || levelKey === "high") && (
-            <Link href="/stressbuster" className="link-draw mt-4 inline-flex items-center gap-2 font-semibold text-ink">
+            <Link href="/stress-buster" className="link-draw mt-4 inline-flex items-center gap-2 font-semibold text-ink">
               Take a break with StressBuster
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -314,7 +335,7 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
                   ) : (
                     <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                       <Info className="h-4 w-4" aria-hidden="true" />
-                      No recording. A near-even placeholder is used in the combined score.
+                      Scores unavailable for this input.
                     </p>
                   )}
                 </li>
@@ -336,11 +357,17 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
               <div>
                 <h4 className="font-semibold text-ink">How we combined the scores</h4>
                 <p className="mt-2 leading-relaxed text-ink/75">
-                  Body signals have a base weight of 60%, your answers 25%, and voice 15%. An input with a clearer top score gets more influence.
-                  {metadata.voice_provided
-                    ? " Your recording was included."
-                    : " No recording was provided, so a near-even placeholder was used for voice."}
+                  Body signals start with a weight of 60%, your answers 25% and voice 15%. Each weight is then scaled by how
+                  clear that input&rsquo;s top score is. Share of the final estimate:
                 </p>
+                <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
+                  {fusion.modality_contributions.map((contribution) => (
+                    <li key={contribution.modality} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <span className="text-ink">{MODALITY_LABELS[contribution.modality] ?? contribution.modality}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{pct(contribution.contribution_score)}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -348,12 +375,14 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
               <div>
                 <h4 className="font-semibold text-ink">Body-signal patterns</h4>
                 <p className="mt-2 leading-relaxed text-ink/75">
-                  These are patterns the model paid attention to. They help explain this estimate, but do not prove what caused it.
+                  The body-signal model leaned toward {physioFactors.target_class ?? "its estimate"}. These patterns moved
+                  it most. They help explain the estimate, but do not prove what caused it.
                 </p>
                 <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
                   {physioFactors.feature_importance.slice(0, 5).map((feature, index) => (
-                    <li key={index} className="py-2.5 text-sm text-ink">
-                      {formatFeatureName(feature.feature)}
+                    <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                      <span className="text-ink">{formatFeatureName(feature.feature)}</span>
+                      <Direction value={feature.importance} target={physioFactors.target_class} />
                     </li>
                   ))}
                 </ul>
@@ -364,24 +393,30 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
               <div>
                 <h4 className="font-semibold text-ink">Answers related to this estimate</h4>
                 <p className="mt-2 leading-relaxed text-ink/75">
-                  These answers were most closely connected to the model&rsquo;s result. That connection does not mean an answer caused it.
+                  Compared with an average respondent, these answers moved the questionnaire model most
+                  {questionnaireFactors.target_class ? ` (it leaned toward ${questionnaireFactors.target_class})` : ""}.
                 </p>
                 <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
                   {questionnaireFactors.feature_importance.slice(0, 3).map((feature, index) => (
-                    <li key={index} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <span className="text-ink">{formatQuestionName(feature.feature)}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{formatAnswer(feature.value)}</span>
+                    <li key={index} className="py-2.5 text-sm">
+                      <span className="block text-ink">{feature.question ?? formatQuestionName(feature.feature)}</span>
+                      <span className="mt-0.5 flex justify-between gap-3 text-xs text-muted-foreground">
+                        {formatAnswer(feature.value)}
+                        <Direction value={feature.importance} target={questionnaireFactors.target_class} />
+                      </span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {metadata.voice_provided && voiceFactors?.available && voiceFactors.feature_importance.length > 0 && (
+            {voiceFactors?.available && voiceFactors.feature_importance.length > 0 && (
               <div>
                 <h4 className="font-semibold text-ink">Voice scores</h4>
                 <p className="mt-2 leading-relaxed text-ink/75">
                   The highest score was {voiceLeader ? formatVoiceFeatureName(voiceLeader.feature).replace(" stress score", "") : "not available"}. These scores come from sound patterns, not the meaning of your words.
+                  {voiceFactors.attention &&
+                    ` ${pct(voiceFactors.attention.share_on_recorded_audio)} of the model's attention was on your recording.`}
                 </p>
                 <ul className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
                   {voiceFactors.feature_importance.slice(0, 3).map((feature, index) => (
@@ -404,8 +439,11 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
           <Detail label="Signal summaries per segment" value={metadata.physio_features} />
           <Detail label="Inputs included" value={metadata.modalities_used.filter(Boolean).join(", ")} />
           <Detail label="Questionnaire total" value={`${dassTotal}/21`} />
-          <Detail label="Voice data" value={metadata.voice_provided ? "Provided" : "Not provided"} />
-          <Detail label="Analysis time" value={new Date().toLocaleTimeString()} />
+          <Detail
+            label="Voice analysed"
+            value={metadata.voice_seconds_analysed ? `${metadata.voice_seconds_analysed.toFixed(1)} s` : "Provided"}
+          />
+          <Detail label="Analysis time" value={analyzedAt ? analyzedAt.toLocaleTimeString() : "—"} />
         </dl>
       </div>
 
@@ -413,6 +451,15 @@ const Results: React.FC<ResultsProps> = ({ result, isLoading }) => {
         SafeSpace is a research prototype. This reading is an estimate, not a medical diagnosis.
       </p>
     </div>
+  )
+}
+
+function Direction({ value, target }: { value: number; target?: string }) {
+  const toward = value >= 0
+  return (
+    <span className="shrink-0 text-xs text-muted-foreground">
+      {toward ? "↑ toward" : "↓ away from"} {target ?? "estimate"}
+    </span>
   )
 }
 

@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Test suite (FastAPI 0.95's TestClient needs httpx < 0.28)
+pytest==8.3.5
+httpx==0.27.2
